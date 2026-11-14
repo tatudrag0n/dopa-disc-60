@@ -6,15 +6,14 @@ import {
   registerUser,
   resolveIdentity,
   sessionHeaders,
-  type AuthEnv,
   type Identity,
 } from "./auth";
 import { accessConfigured } from "./access";
-import { getLeaderboard, submitScore } from "./scores";
+import { getLeaderboard, submitScore, type ScoreEnv } from "./scores";
 import { SCORE_RANGES, type MeResponse, type ScoreRange } from "../src/shared/types";
 import { fail, isHttps, json, readJson } from "./util";
 
-export interface Env extends AuthEnv {
+export interface Env extends ScoreEnv {
   ASSETS: Fetcher;
   /** 任意: Turnstile を有効にする場合のシークレット */
   TURNSTILE_SECRET?: string;

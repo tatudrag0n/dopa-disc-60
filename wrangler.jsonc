@@ -16,26 +16,27 @@
       "id": "d0b8f834926449f08a9e8f32f46aa8e0"
     }
   ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dopa-disc",
+      "database_id": "293f3e2d-93b7-4685-9761-6893809add47",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "routes": [
+    { "pattern": "discgame.mct-official.com", "custom_domain": true }
+  ],
   "observability": {
     "enabled": true
   }
 
-  // ─── Cloudflare Access を使う場合（推奨） ──────────────────────────
-  // 1) 下の routes のコメントを外して独自ドメインで配信する
-  //    （Cloudflare Access は workers.dev では使えない）
-  // 2) ダッシュボード → Zero Trust → Access → Applications で
-  //    このホスト名を保護し、ポリシー（例: One-time PIN / Google）を設定
-  // 3) アプリの "Application Audience (AUD) Tag" をコピーして
-  //    `wrangler secret put ACCESS_AUD` で登録
-  // 4) `wrangler secret put ACCESS_TEAM_DOMAIN` に
-  //    "<チーム名>.cloudflareaccess.com" を登録
+  // ─── Cloudflare Access（Zero Trust）について ────────────────────────
+  // 独自ドメインでの配信が前提。次の secret を設定すると、
+  // Worker は Cf-Access-Jwt-Assertion を JWKS で署名検証して身元を採用する。
   //
-  // "routes": [
-  //   { "pattern": "disc.mct-official.com", "custom_domain": true }
-  // ],
+  //   npx wrangler secret put ACCESS_TEAM_DOMAIN   # <team>.cloudflareaccess.com
+  //   npx wrangler secret put ACCESS_AUD           # Application Audience (AUD) Tag
   //
-  // "vars": {
-  //   "ACCESS_TEAM_DOMAIN": "yourteam.cloudflareaccess.com",
-  //   "ACCESS_AUD": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  // }
+  // 未設定のあいだは内蔵アカウント認証（PBKDF2 + HttpOnly Cookie）で動く。
 }

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Home, Loader2, LogIn, RotateCcw, Trophy } from "lucide-react";
+import { Check, Home, Loader2, LogIn, RotateCcw, Share2, Trophy } from "lucide-react";
 import { ApiError, submitScore } from "../lib/api";
 import { distanceComment, improvementHint, shapeComment, type PlayResult } from "../game/engine";
 import type { AuthUser } from "../lib/useAuth";
+
+const SHARE_URL = "https://discgame.mct-official.com/";
 
 interface Props {
   result: PlayResult;
@@ -35,6 +37,7 @@ export function ResultOverlay({
 }: Props) {
   const [state, setState] = useState<SubmitState>({ kind: "idle" });
   const [display, setDisplay] = useState(0);
+  const [copied, setCopied] = useState(false);
   const submittedRef = useRef(false);
 
   // 数字のカウントアップ
@@ -84,6 +87,21 @@ export function ResultOverlay({
   const comment = useMemo(() => distanceComment(result.distance), [result.distance]);
   const hint = useMemo(() => improvementHint(result), [result]);
 
+  async function share() {
+    const text = `フライングディスクで ${result.distance.toFixed(1)}m 飛ばした！`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "フライングディスク - ドパ仕様", text, url: SHARE_URL });
+        return;
+      }
+      await navigator.clipboard.writeText(`${text} ${SHARE_URL}`);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* ユーザーがキャンセルした場合は何もしない */
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-[55] flex items-center justify-center overflow-y-auto bg-black/55 p-3 backdrop-blur-sm sm:p-6"
@@ -92,9 +110,20 @@ export function ResultOverlay({
       aria-labelledby="result-title"
     >
       <div className="pop-in my-auto w-full max-w-md rounded-3xl border-[3px] border-[var(--line)] bg-[var(--surface)] p-5 shadow-[8px_8px_0_var(--line)] sm:p-7">
-        <p className="text-center text-[10px] font-black tracking-[0.3em] text-[var(--pink)]">
-          RESULT
-        </p>
+        <div className="relative">
+          <p className="text-center text-[10px] font-black tracking-[0.3em] text-[var(--pink)]">
+            RESULT
+          </p>
+          <button
+            type="button"
+            onClick={() => void share()}
+            className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-full border-2 border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1 text-[10px] font-black transition active:scale-95"
+            aria-label="結果をシェアする"
+          >
+            {copied ? <Check className="h-3 w-3 text-[var(--green)]" /> : <Share2 className="h-3 w-3" />}
+            {copied ? "コピー済み" : "シェア"}
+          </button>
+        </div>
 
         <h2 id="result-title" className="mt-1 text-center text-sm font-black text-[var(--muted)]">
           {comment}

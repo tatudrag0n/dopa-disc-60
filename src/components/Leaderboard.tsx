@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Crown, Loader2, LogIn, RefreshCw, Trophy } from "lucide-react";
+import { Loader2, LogIn, RefreshCw, Trophy } from "lucide-react";
 import { ApiError, fetchLeaderboard } from "../lib/api";
 import { RANGE_LABEL, SCORE_RANGES, type LeaderboardResponse, type ScoreRange } from "../shared/types";
 import type { AuthUser } from "../lib/useAuth";
@@ -47,16 +47,21 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
     <section aria-labelledby="leaderboard-title" className="card rounded-3xl overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--violet)] px-4 py-3 text-white sm:px-5">
         <h2 id="leaderboard-title" className="flex items-center gap-2 text-base font-black sm:text-lg">
-          <Trophy className="h-5 w-5" /> ランキング
+          <Trophy className="h-5 w-5" /> {RANGE_LABEL[range]}ランキング
         </h2>
-        <button
-          type="button"
-          onClick={() => void load(range)}
-          className="grid h-8 w-8 place-items-center rounded-full bg-white/20 transition hover:bg-white/30"
-          aria-label="再読み込み"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-black">
+            {entries.length}人
+          </span>
+          <button
+            type="button"
+            onClick={() => void load(range)}
+            className="grid h-8 w-8 place-items-center rounded-full bg-white/20 transition hover:bg-white/30"
+            aria-label="再読み込み"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-1.5 bg-[var(--surface-2)] px-3 py-2.5 sm:px-4" role="tablist">
@@ -90,6 +95,45 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
         </div>
       )}
 
+      {/* トップ3の表彰台 */}
+      {entries.length > 0 && (
+        <div className="grid grid-cols-3 items-end gap-1.5 bg-[var(--surface-2)] px-2 pb-0 pt-4">
+          {[1, 0, 2].map((idx) => {
+            const e = entries[idx];
+            if (!e) return <div key={`gap-${idx}`} aria-hidden="true" />;
+            const isMe = e.id === myId;
+            const top = idx === 0;
+            return (
+              <div
+                key={e.id}
+                className={`flex flex-col items-center gap-0.5 rounded-t-xl border-2 border-b-0 border-[var(--line)] px-1 pb-2 ${
+                  top ? "pt-7" : idx === 1 ? "pt-4" : "pt-2"
+                } ${isMe ? "bg-[var(--yellow)]" : "bg-[var(--surface)]"}`}
+              >
+                <span className={top ? "text-2xl" : "text-lg"} aria-hidden="true">
+                  {MEDALS[idx]}
+                </span>
+                <span
+                  className={`w-full truncate text-center text-[11px] font-black ${
+                    isMe ? "text-[#1c1030]" : ""
+                  }`}
+                >
+                  {e.name}
+                </span>
+                <span
+                  className={`font-black tabular-nums ${
+                    top ? "text-base" : "text-sm"
+                  } ${isMe ? "text-[#1c1030]" : "text-[var(--pink)]"}`}
+                >
+                  {e.distance.toFixed(1)}
+                  <span className="text-[9px]">m</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="max-h-[420px] overflow-y-auto overscroll-contain">
         {loading && entries.length === 0 && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm font-bold text-[var(--muted)]">
@@ -119,9 +163,10 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
           </div>
         )}
 
-        {entries.length > 0 && (
+        {entries.length > 3 && (
           <ol className="divide-y-2 divide-dashed divide-soft">
-            {entries.map((entry, i) => {
+            {entries.slice(3).map((entry, i) => {
+              const rank = i + 4;
               const isMe = entry.id === myId;
               return (
                 <li
@@ -130,15 +175,8 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
                     isMe ? "bg-soft-yellow-strong" : ""
                   }`}
                 >
-                  <span
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${
-                      i < 3
-                        ? "bg-[var(--surface-2)] text-base"
-                        : "bg-[var(--surface-2)] text-[var(--muted)]"
-                    }`}
-                    aria-label={`${i + 1}位`}
-                  >
-                    {i < 3 ? MEDALS[i] : i + 1}
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-xs font-black text-[var(--muted)]">
+                    {rank}
                   </span>
 
                   <div className="min-w-0 flex-1">
@@ -149,7 +187,6 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
                           YOU
                         </span>
                       )}
-                      {i === 0 && <Crown className="h-3.5 w-3.5 shrink-0 text-[var(--yellow)]" />}
                     </p>
                     <p className="text-[10px] font-bold text-[var(--muted)]">
                       形 {Math.round(entry.shapeScore)}% ・ 回転 {Math.round(entry.rot)} ・ 勢い{" "}

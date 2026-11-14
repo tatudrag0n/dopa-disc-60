@@ -4,7 +4,8 @@
 飛距離は **形 × 回転 × 勢い** で決まる。スマホも PC もそのまま遊べて、
 スコアは Cloudflare 上のランキングに記録される。
 
-- 本番: <https://dopa-disc-60.tatudragon0327.workers.dev>
+- 本番: <https://discgame.mct-official.com>
+- リポジトリ: <https://github.com/tatudrag0n/dopa-disc-60>
 - 旧版（静的 `index.html` のみ）は git 履歴に残っています
 
 ## できること
@@ -13,7 +14,7 @@
 | --- | --- |
 | スマホ / PC 対応 UI | Pointer Events で指・マウス・ペンを同一処理。`100dvh` + セーフエリア対応、モバイルは下部タブ、PC は上部ナビ |
 | ゲーム | 描く → 回す → 飛ばす の 3 ステップ。形の円らしさ・閉じ具合・大きさを評価 |
-| ランキング | 歴代 / 今日 / 今週 の 3 区分。上位 200 件を Cloudflare KV に保持 |
+| ランキング | 歴代 / 今日 / 今週 の 3 区分。上位 200 件を Cloudflare D1 に保持 |
 | 認証 | Cloudflare Access（Zero Trust）連携 + 内蔵アカウント（メール不要） |
 | 不正対策 | 飛距離は**サーバー側で再計算**。クライアントの申告値は使わない |
 | PWA | マニフェスト + アイコン。ホーム画面に追加可能 |
@@ -34,12 +35,23 @@ worker/
   index.ts               ルーター（/api/*）
   auth.ts                登録・ログイン・セッション
   access.ts              Cloudflare Access の JWT 検証
-  scores.ts              ランキングの読み書きとレート制限
+  scores.ts              ランキングの読み書き（D1）とレート制限
   util.ts                Cookie・KV・日付ユーティリティ
+migrations/
+  0001_scores.sql        D1 スキーマ
 ```
 
 - フロント: Vite + React 18 + TypeScript + Tailwind CSS 3
-- バックエンド: Cloudflare Workers（Static Assets + KV）
+- バックエンド: Cloudflare Workers（Static Assets + D1 + KV）
+  - ランキング = D1（同時投稿でも記録が消えない）
+  - セッション / レート制限 = KV（TTL 任せで消えてよいデータ）
+
+### なぜランキングが D1 なのか
+
+最初は KV に 1 つの JSON ドキュメントとしてランキングを持たせていたが、
+**read-modify-write の競合でスコアが消失した**（同時に 4 件投稿すると最後の 1 件しか残らない）。
+D1 なら `INSERT` と `ON CONFLICT DO UPDATE` が原子的に効くため、
+同時投稿でも記録が落ちない。
 
 ## ローカル開発
 
@@ -70,11 +82,17 @@ npm run build
 npm run deploy     # build + wrangler deploy
 ```
 
-初回のみ KV ネームスペースを作成し、`wrangler.jsonc` の `id` を差し替えます。
+初回のみ、KV ネームスペースと D1 データベースを作成し、
+`wrangler.jsonc` の `id` / `database_id` を差し替えます。
 
 ```bash
 npx wrangler kv namespace create DOPA_KV
+npx wrangler d1 create dopa-disc
+npx wrangler d1 execute dopa-disc --remote --file migrations/0001_scores.sql
 ```
+
+配信先は `wrangler.jsonc` の `routes` で指定します（現在は `discgame.mct-official.com`）。
+Cloudflare 側に DNS レコードと証明書が自動で作られます。
 
 CI からデプロイする場合は、リポジトリの Secrets に
 `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` を登録し、
@@ -85,16 +103,12 @@ Actions の `Deploy to Cloudflare` を手動実行してください。
 内蔵アカウントでも動きますが、**サイト全体を Cloudflare の認証で守る**場合は次の手順です。
 Access は `workers.dev` では使えないため、独自ドメインが必要です。
 
-1. `wrangler.jsonc` の `routes` のコメントを外し、独自ドメインで配信する
+1. 独自ドメインでの配信は設定済み（`wrangler.jsonc` の `routes`）
+   → `discgame.mct-official.com` で公開中
 
-   ```jsonc
-   "routes": [
-     { "pattern": "disc.example.com", "custom_domain": true }
-   ]
-   ```
-
-2. Cloudflare ダッシュボード → **Zero Trust → Access → Applications** で
-   対象ホスト名を保護し、ポリシー（One-time PIN / Google / GitHub など）を設定
+2. Cloudflare ダッシュボード → **Zero Trust** を初回アクティベート（無料）
+   → **Access → Applications** で `discgame.mct-official.com` を保護し、
+   ポリシー（One-time PIN / Google / GitHub など）を設定
 3. アプリの **Application Audience (AUD) Tag** を控えて secret に登録
 
    ```bash
