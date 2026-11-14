@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>フライングディスク - ドパ仕様</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;background:#0a7cff;color:#fff;overflow:hidden;height:100dvh}
+#app{height:100dvh;display:flex;flex-direction:column}
+header{padding:10px 14px 6px;display:flex;justify-content:space-between;align-items:center}
+h1{font-size:15px;letter-spacing:.08em}
+.step{font-size:11px;background:rgba(255,255,255,.22);padding:5px 10px;border-radius:999px}
+main{flex:1;position:relative;overflow:hidden}
+#sky{position:absolute;inset:0;background:linear-gradient(180deg,#1a8cff 0%,#4fc3ff 55%,#a8e6ff 82%,#d9f7d9 100%)}
+#ground{position:absolute;left:-10%;right:-10%;bottom:-6%;height:52%;background:linear-gradient(180deg,#2ee66b 0%,#1ccf5a 55%,#12b84a 100%);border-top:6px solid #a8e6ff;border-radius:50% 50% 0 0 / 28px 28px 0 0}
+#horizon{position:absolute;left:0;right:0;top:48%;height:2px;background:rgba(255,255,255,.6)}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#discCanvas{pointer-events:none}
+#info{position:absolute;left:0;right:0;bottom:0;padding:10px 14px 14px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.18));text-align:center}
+#msg{font-size:14px;font-weight:700;background:rgba(0,0,0,.38);display:inline-block;padding:8px 14px;border-radius:999px;backdrop-filter:blur(6px)}
+#stats{margin-top:8px;display:flex;gap:8px;justify-content:center}
+.pill{font-size:11px;background:rgba(255,255,255,.92);color:#111;padding:6px 10px;border-radius:999px;font-weight:700}
+.pill b{color:#ff2e8a}
+#result{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);text-align:center;padding:20px}
+#result.show{display:flex}
+#result .big{font-size:56px;font-weight:900;letter-spacing:-.02em}
+#result .sub{font-size:13px;opacity:.9;margin-top:6px}
+button{margin-top:16px;border:0;background:#ff2e8a;color:#fff;font-size:15px;font-weight:800;padding:14px 28px;border-radius:999px;box-shadow:0 10px 24px rgba(255,46,138,.45)}
+button:active{transform:scale(.97)}
+#rank{position:absolute;top:10px;right:14px;font-size:11px;background:rgba(255,255,255,.9);color:#111;padding:5px 9px;border-radius:999px;font-weight:700}
+</style>
+</head>
+<body>
+<div id="app">
+<header><h1>フライングディスク</h1><div class="step" id="stepLabel">STEP 1 / 2</div><div id="rank">BEST —</div></header>
+<main id="stage">
+<div id="sky"></div><div id="ground"></div><div id="horizon"></div>
+<canvas id="drawCanvas"></canvas>
+<canvas id="discCanvas"></canvas>
+<div id="info"><div id="msg">形を1筆で描いて</div><div id="stats"><div class="pill">形 <b id="shapeVal">—</b></div><div class="pill">回転 <b id="rotVal">0</b></div><div class="pill">勢い <b id="momVal">0%</b></div></div></div>
+<div id="result"><div style="font-size:13px;letter-spacing:.2em">RESULT</div><div class="big" id="distBig">0.0m</div><div class="sub" id="distSub">形 × 回転 × 加速度 = 飛距離</div><button id="retry">もう一度飛ばす</button></div>
+</main>
+</div>
+<script>
+const drawC=document.getElementById('drawCanvas'), discC=document.getElementById('discCanvas');
+const dctx=drawC.getContext('2d'), fctx=discC.getContext('2d');
+let W,H; function resize(){W=innerWidth;H=document.getElementById('stage').clientHeight; [drawC,discC].forEach(c=>{c.width=W*devicePixelRatio;c.height=H*devicePixelRatio;c.style.width=W+'px';c.style.height=H+'px';c.getContext('2d').setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}); drawDisc();} addEventListener('resize',resize);
+let step=1, drawing=false, pts=[], shape=null, shapeScore=0, rot=0, rotSpeed=0, rotClean=0, lastRotAngle=0, lastRotTime=0, spinAngle=0, mom=0, lastMove=null, isFlying=false, flyX=0, flyY=0, flyDist=0, best=Number(localStorage.getItem('dopa_best')||0);
+document.getElementById('rank').textContent = best? 'BEST '+best.toFixed(1)+'m':'BEST —';
+let discPos={x:0,y:0}; function center(){return {x:W/2,y:H*0.58}}
+function shapeQuality(pts){
+ if(pts.length<20) return 0;
+ let cx=0,cy=0; pts.forEach(p=>{cx+=p.x;cy+=p.y}); cx/=pts.length; cy/=pts.length;
+ let ds=pts.map(p=>Math.hypot(p.x-cx,p.y-cy)); let avg=ds.reduce((a,b)=>a+b)/ds.length; let variance=ds.reduce((a,b)=>a+(b-avg)*(b-avg),0)/ds.length; let std=Math.sqrt(variance); let clean=Math.max(0,1-std/(avg||1)); return {cx,cy,avg,clean};
+}
+function drawDisc(){
+ fctx.clearRect(0,0,W,H); if(!shape) return;
+ const pos = isFlying? {x:flyX,y:flyY} : discPos.x? discPos : center();
+ const baseR = shape.avg; const r = Math.max(28, Math.min(90, baseR*0.9));
+ // side view: draw as one closed shape, slight dome, vibrant gradient
+ fctx.save(); fctx.translate(pos.x,pos.y); fctx.rotate(0);
+ // shadow
+ fctx.fillStyle='rgba(0,0,0,.18)'; fctx.beginPath(); fctx.ellipse(0, r*0.85, r*1.05, 8,0,0,Math.PI*2); fctx.fill();
+ // disc body - one shape, not two plates
+ let grad=fctx.createLinearGradient(-r,-r*0.5,r,r*0.5); grad.addColorStop(0,'#ff9a00'); grad.addColorStop(0.45,'#ff2e8a'); grad.addColorStop(1,'#7b2eff');
+ fctx.beginPath();
+ // side view: elongated dome shape, single closed path
+ fctx.moveTo(-r,0);
+ fctx.quadraticCurveTo(-r*0.6,-r*0.55,0,-r*0.55);
+ fctx.quadraticCurveTo(r*0.6,-r*0.55,r,0);
+ fctx.quadraticCurveTo(r*0.6,r*0.22,0,r*0.22);
+ fctx.quadraticCurveTo(-r*0.6,r*0.22,-r,0);
+ fctx.closePath(); fctx.fillStyle=grad; fctx.fill();
+ // surface line that rotates with disc
+ fctx.save(); fctx.rotate(spinAngle); fctx.strokeStyle='rgba(255,255,255,.85)'; fctx.lineWidth=3; fctx.beginPath(); fctx.moveTo(-r*0.82,0); fctx.lineTo(r*0.82,0); fctx.stroke(); fctx.fillStyle='rgba(255,255,255,.95)'; fctx.beginPath(); fctx.arc(r*0.62,0,4,0,Math.PI*2); fctx.fill(); fctx.restore();
+ // outline follows drawn shape irregularity: draw subtle irregular stroke
+ if(shape.pts){ fctx.strokeStyle='rgba(255,255,255,.35)'; fctx.lineWidth=1.2; fctx.beginPath(); shape.pts.forEach((p,i)=>{let a=Math.atan2(p.y-shape.cy,p.x-shape.cx); let rr=Math.hypot(p.x-shape.cy,p.y-shape.cy); let nr = r*(rr/shape.avg); let x=Math.cos(a+spinAngle)*nr; let y=Math.sin(a+spinAngle)*nr*0.22; if(i==0) fctx.moveTo(x,y); else fctx.lineTo(x,y)}); fctx.closePath(); fctx.stroke(); }
+ fctx.restore();
+}
+function drawTrace(){ dctx.clearRect(0,0,W,H); if(pts.length<2) return; dctx.strokeStyle='#fff'; dctx.lineWidth=6; dctx.lineCap='round'; dctx.lineJoin='round'; dctx.beginPath(); pts.forEach((p,i)=>i==0?dctx.moveTo(p.x,p.y):dctx.lineTo(p.x,p.y)); dctx.stroke(); }
+function getPos(e){ const r=drawC.getBoundingClientRect(); const t=e.touches?e.touches[0]:e; return {x:t.clientX-r.left,y:t.clientY-r.top}; }
+drawC.addEventListener('touchstart',e=>{e.preventDefault(); if(isFlying) return; const p=getPos(e); if(step==1){drawing=true;pts=[p];} else { lastMove={...p,time:performance.now()}; lastRotAngle=Math.atan2(p.y-H*0.58,p.x-W/2); lastRotTime=performance.now();}},{passive:false});
+drawC.addEventListener('touchmove',e=>{e.preventDefault(); if(isFlying) return; const p=getPos(e); const now=performance.now();
+ if(step==1 && drawing){pts.push(p); drawTrace();}
+ else if(step==2){
+   // rotation: angle change + speed + cleanliness
+   let a=Math.atan2(p.y-H*0.58,p.x-W/2); let da=a-lastRotAngle; if(da>Math.PI)da-=Math.PI*2; if(da<-Math.PI)da+=Math.PI*2;
+   let dt=Math.max(1,now-lastRotTime); let speed=Math.abs(da)/dt*1000;
+   // cleanliness: distance from center should stay stable
+   let dist=Math.hypot(p.x-W/2,p.y-H*0.58); let clean=1-Math.min(0.6,Math.abs(dist-90)/200);
+   rotSpeed = rotSpeed*0.8 + speed*0.2; rotClean = rotClean*0.8 + clean*0.2;
+   rot = Math.max(0, rotSpeed * (0.5+rotClean) * 12);
+   spinAngle+=da; mom=Math.min(100, mom + Math.abs(da)*28 + speed*4);
+   document.getElementById('rotVal').textContent=Math.round(rot);
+   document.getElementById('momVal').textContent=Math.round(mom)+'%';
+   discPos={x:p.x,y:p.y}; drawDisc();
+   lastRotAngle=a; lastRotTime=now;
+   // if reaches top -> fly
+   if(p.y < H*0.12){ fly(); }
+   // momentum decays if slow
+   if(speed<0.02) mom=Math.max(0,mom-0.8);
+ }
+},{passive:false});
+drawC.addEventListener('touchend',e=>{ if(step==1 && drawing){ drawing=false; let q=shapeQuality(pts); if(pts.length>20 && q){ shape={...q,pts:[...pts],avg:q.avg}; shapeScore=Math.round(q.clean*100); document.getElementById('shapeVal').textContent=shapeScore+'%'; step=2; document.getElementById('stepLabel').textContent='STEP 2 / 2'; document.getElementById('msg').textContent='回して、そのまま上までスワイプ'; discPos=center(); dctx.clearRect(0,0,W,H); drawDisc(); } else {pts=[]; drawTrace();} } },{passive:false});
+drawC.addEventListener('mousedown',e=>{const p=getPos(e); if(step==1){drawing=true;pts=[p];} else {lastRotAngle=Math.atan2(p.y-H*0.58,p.x-W/2); lastRotTime=performance.now();}});
+addEventListener('mousemove',e=>{ if(!drawing && step!=2) return; if(isFlying) return; const p=getPos(e); if(step==1 && drawing){pts.push(p); drawTrace();}});
+addEventListener('mouseup',()=>{ if(step==1 && drawing){drawing=false; let q=shapeQuality(pts); if(pts.length>20 && q){ shape={...q,pts:[...pts],avg:q.avg}; shapeScore=Math.round(q.clean*100); document.getElementById('shapeVal').textContent=shapeScore+'%'; step=2; document.getElementById('stepLabel').textContent='STEP 2 / 2'; document.getElementById('msg').textContent='回して、そのまま上までスワイプ'; discPos=center(); dctx.clearRect(0,0,W,H); drawDisc();}}});
+function fly(){
+ if(isFlying||!shape) return; isFlying=true;
+ let accel = Math.max(0.4, Math.min(2.2, mom/60 + rot/1200));
+ let dist = (shapeScore/100) * (rot/100) * accel * 42;
+ dist = Math.max(8, Math.min(180, dist));
+ flyDist=dist; flyX=W/2; flyY=H*0.42; let start=performance.now(); let dur=1400+dist*8;
+ document.getElementById('msg').textContent='ビュッと飛んでる！';
+ function anim(t){ let p=Math.min(1,(t-start)/dur); let ease=1-Math.pow(1-p,2); flyX=W/2 + Math.sin(p*2)*6; flyY=H*0.42 - Math.sin(p*Math.PI)*18; spinAngle+=0.35; // camera push: keep disc same size, ground flows
+  drawDisc(); if(p<1) requestAnimationFrame(anim); else finish(); } requestAnimationFrame(anim);
+}
+function finish(){
+ document.getElementById('distBig').textContent=flyDist.toFixed(1)+'m';
+ document.getElementById('distSub').textContent='形 '+shapeScore+'% × 回転 '+Math.round(rot)+' × 勢い '+Math.round(mom)+'% = '+flyDist.toFixed(1)+'m';
+ document.getElementById('result').classList.add('show');
+ if(flyDist>best){best=flyDist; localStorage.setItem('dopa_best',String(best)); document.getElementById('rank').textContent='BEST '+best.toFixed(1)+'m';}
+}
+document.getElementById('retry').onclick=()=>{ isFlying=false; step=1; pts=[]; shape=null; shapeScore=0; rot=0; mom=0; spinAngle=0; document.getElementById('result').classList.remove('show'); document.getElementById('stepLabel').textContent='STEP 1 / 2'; document.getElementById('msg').textContent='形を1筆で描いて'; document.getElementById('shapeVal').textContent='—'; document.getElementById('rotVal').textContent='0'; document.getElementById('momVal').textContent='0%'; dctx.clearRect(0,0,W,H); drawDisc();};
+resize(); setInterval(()=>{ if(!isFlying && step==2){ mom=Math.max(0,mom-0.6); document.getElementById('momVal').textContent=Math.round(mom)+'%'; }},120);
+</script>
+</body>
+</html>
+
