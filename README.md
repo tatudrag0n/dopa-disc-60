@@ -1,2 +1,141 @@
-# dopa-disc-60
-HTML web app
+# フライングディスク - ドパ仕様
+
+1筆で描いた形がそのまま円盤になる。円盤を回して勢いをつけ、上へスワイプすると飛ぶ。
+飛距離は **形 × 回転 × 勢い** で決まる。スマホも PC もそのまま遊べて、
+スコアは Cloudflare 上のランキングに記録される。
+
+- 本番: <https://dopa-disc-60.tatudragon0327.workers.dev>
+- 旧版（静的 `index.html` のみ）は git 履歴に残っています
+
+## できること
+
+| 機能 | 内容 |
+| --- | --- |
+| スマホ / PC 対応 UI | Pointer Events で指・マウス・ペンを同一処理。`100dvh` + セーフエリア対応、モバイルは下部タブ、PC は上部ナビ |
+| ゲーム | 描く → 回す → 飛ばす の 3 ステップ。形の円らしさ・閉じ具合・大きさを評価 |
+| ランキング | 歴代 / 今日 / 今週 の 3 区分。上位 200 件を Cloudflare KV に保持 |
+| 認証 | Cloudflare Access（Zero Trust）連携 + 内蔵アカウント（メール不要） |
+| 不正対策 | 飛距離は**サーバー側で再計算**。クライアントの申告値は使わない |
+| PWA | マニフェスト + アイコン。ホーム画面に追加可能 |
+| テーマ | ライト / ダーク / OS 追従 |
+
+## 構成
+
+```
+index.html               Vite エントリ
+src/
+  App.tsx                画面全体（ヒーロー / ランキング / 使い方）
+  game/engine.ts         ゲームロジック（純粋関数・採点）
+  game/DiscGame.tsx      Canvas 描画と操作
+  components/            認証ダイアログ・ランキング・結果画面
+  shared/types.ts        クライアントとワーカー共通の型と定数
+  lib/                   API クライアント・認証フック・テーマ
+worker/
+  index.ts               ルーター（/api/*）
+  auth.ts                登録・ログイン・セッション
+  access.ts              Cloudflare Access の JWT 検証
+  scores.ts              ランキングの読み書きとレート制限
+  util.ts                Cookie・KV・日付ユーティリティ
+```
+
+- フロント: Vite + React 18 + TypeScript + Tailwind CSS 3
+- バックエンド: Cloudflare Workers（Static Assets + KV）
+
+## ローカル開発
+
+```bash
+npm install
+npm run dev        # http://localhost:5173 （/api は wrangler dev にプロキシ）
+npm run worker:dev # http://127.0.0.1:8787
+```
+
+> Windows で `wrangler dev` が
+> `CreateDirectory: アクセスが拒否されました; path = miniflare-email-store`
+> で落ちる場合は、`--persist-to` で書き込み可能なディレクトリを指定してください。
+>
+> ```bash
+> npx wrangler dev --persist-to C:\path\to\writable\dir
+> ```
+
+型チェックとビルド:
+
+```bash
+npm run typecheck
+npm run build
+```
+
+## デプロイ
+
+```bash
+npm run deploy     # build + wrangler deploy
+```
+
+初回のみ KV ネームスペースを作成し、`wrangler.jsonc` の `id` を差し替えます。
+
+```bash
+npx wrangler kv namespace create DOPA_KV
+```
+
+CI からデプロイする場合は、リポジトリの Secrets に
+`CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` を登録し、
+Actions の `Deploy to Cloudflare` を手動実行してください。
+
+## Cloudflare Access（Zero Trust）で認証する
+
+内蔵アカウントでも動きますが、**サイト全体を Cloudflare の認証で守る**場合は次の手順です。
+Access は `workers.dev` では使えないため、独自ドメインが必要です。
+
+1. `wrangler.jsonc` の `routes` のコメントを外し、独自ドメインで配信する
+
+   ```jsonc
+   "routes": [
+     { "pattern": "disc.example.com", "custom_domain": true }
+   ]
+   ```
+
+2. Cloudflare ダッシュボード → **Zero Trust → Access → Applications** で
+   対象ホスト名を保護し、ポリシー（One-time PIN / Google / GitHub など）を設定
+3. アプリの **Application Audience (AUD) Tag** を控えて secret に登録
+
+   ```bash
+   npx wrangler secret put ACCESS_TEAM_DOMAIN   # 例: myteam.cloudflareaccess.com
+   npx wrangler secret put ACCESS_AUD           # AUD タグ
+   ```
+
+4. 再デプロイ。以降は `Cf-Access-Jwt-Assertion` を **署名検証**して身元を採用し、
+   未認証リクエストはランキング投稿が拒否されます。
+
+`ACCESS_TEAM_DOMAIN` / `ACCESS_AUD` が未設定のときは Access 連携は自動的に無効になり、
+内蔵アカウント認証にフォールバックします（`GET /api/me` の `accessEnabled` で判定可能）。
+
+## API
+
+| メソッド | パス | 説明 |
+| --- | --- | --- |
+| GET | `/api/health` | 死活確認 |
+| GET | `/api/me` | ログイン中の身元と Access 有効/無効 |
+| POST | `/api/auth/register` | `{ name, password }` で登録 |
+| POST | `/api/auth/login` | `{ name, password }` でログイン |
+| POST | `/api/auth/logout` | セッション破棄 |
+| GET | `/api/leaderboard?range=all\|today\|week&limit=50` | ランキング取得 |
+| POST | `/api/scores` | `{ shapeScore, rot, mom }` を投稿（要ログイン） |
+
+## ゲームバランス
+
+`src/shared/types.ts` の定数がクライアントとワーカーで共有されます。
+
+```
+accel    = clamp(mom / 60 + rot / 1200, 0.4, 2.2)
+distance = clamp((shapeScore/100) * (rot/100) * accel * 42, 8, 180)
+```
+
+- `shapeScore` 0–100（円らしさ × 閉じ具合 × 大きさ）
+- `rot` 0–250（1 回転あたり約 45 点。最大まで 5〜6 回転）
+- `mom` 0–100（回す速さで上昇、止まると減衰）
+
+サーバーは同じ式で距離を確定するため、通信内容を書き換えても記録は伸びません。
+投稿は 1 分あたり 12 回までに制限しています。
+
+## ライセンス
+
+MIT

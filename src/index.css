@@ -1,0 +1,269 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --------------------------------------------------------------- *
+ * デザイントークン
+ * light / dark を CSS 変数だけで切り替える。Tailwind の任意値
+ * （bg-[var(--bg)] など）と併用する。
+ * --------------------------------------------------------------- */
+:root {
+  --bg: #fff8e7;
+  --surface: #ffffff;
+  --surface-2: #fff0f6;
+  --ink: #1c1030;
+  --muted: #5f5470;
+  --line: #22143a;
+  --pink: #ff2d78;
+  --violet: #7a00ff;
+  --cyan: #00c8ef;
+  --yellow: #ffd400;
+  --green: #00c853;
+  --danger: #e11d48;
+
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #150826;
+  --surface: #23113f;
+  --surface-2: #31165a;
+  --ink: #fff7e8;
+  --muted: #d6c9ef;
+  --line: #fff7e8;
+  --pink: #ff4d93;
+  --violet: #a55cff;
+  --cyan: #35e0ff;
+  --yellow: #ffe14d;
+  --green: #2ee66b;
+  --danger: #ff5b78;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #150826;
+    --surface: #23113f;
+    --surface-2: #31165a;
+    --ink: #fff7e8;
+    --muted: #d6c9ef;
+    --line: #fff7e8;
+    --pink: #ff4d93;
+    --violet: #a55cff;
+    --cyan: #35e0ff;
+    --yellow: #ffe14d;
+    --green: #2ee66b;
+    --danger: #ff5b78;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Yu Gothic",
+    Meiryo, system-ui, sans-serif;
+  line-height: 1.6;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+/* ゲーム中はページスクロールを止める（iOS の引っ張り更新対策） */
+body.dopa-locked {
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
+
+/* フォーカスリング（キーボード操作でも見えるように） */
+:focus-visible {
+  outline: 3px solid var(--cyan);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: var(--yellow);
+  color: #1c1030;
+}
+
+.display-font {
+  font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Yu Gothic",
+    Meiryo, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* 背景のドット模様 */
+.hero-dots {
+  background-image: radial-gradient(circle, rgba(255, 45, 120, 0.18) 2px, transparent 2.5px),
+    radial-gradient(circle, rgba(122, 0, 255, 0.14) 2px, transparent 2.5px);
+  background-size: 26px 26px, 34px 34px;
+  background-position: 0 0, 13px 17px;
+}
+
+:root[data-theme="dark"] .hero-dots {
+  background-image: radial-gradient(circle, rgba(255, 77, 147, 0.16) 2px, transparent 2.5px),
+    radial-gradient(circle, rgba(165, 92, 255, 0.14) 2px, transparent 2.5px);
+}
+
+/* 立体ボタン */
+.btn-3d {
+  border: 2px solid var(--line);
+  box-shadow: 0 6px 0 var(--line);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+.btn-3d:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow: 0 7px 0 var(--line);
+}
+.btn-3d:active {
+  transform: translateY(5px);
+  box-shadow: 0 1px 0 var(--line);
+}
+.btn-3d:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: 0 6px 0 var(--line);
+}
+
+.play-btn {
+  background: linear-gradient(100deg, var(--pink) 0%, var(--violet) 58%, #3b0aff 100%);
+  color: #fff;
+}
+
+.card {
+  border: 3px solid var(--line);
+  box-shadow: 8px 8px 0 var(--line);
+  background: var(--surface);
+}
+
+@media (max-width: 640px) {
+  .card {
+    box-shadow: 5px 5px 0 var(--line);
+  }
+}
+
+/* アニメーション */
+@keyframes pop {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.pop {
+  animation: pop 0.22s ease both;
+}
+
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-9px) rotate(4deg);
+  }
+}
+.floaty {
+  animation: floaty 3.2s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: rise 0.4s ease both;
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  60% {
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.pop-in {
+  animation: popIn 0.34s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+/* 横スクロール領域のスクロールバーを隠す */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* --------------------------------------------------------------- *
+ * CSS 変数にアルファを掛ける Tailwind 記法（bg-[var(--x)]/40）は
+ * v3 では生成されず、無効なクラスとして捨てられる。
+ * 代わりに color-mix で半透明を作る。
+ * --------------------------------------------------------------- */
+.line-soft {
+  border-color: color-mix(in srgb, var(--line) 26%, transparent);
+}
+.line-faint {
+  border-color: color-mix(in srgb, var(--line) 16%, transparent);
+}
+.divide-soft > :not([hidden]) ~ :not([hidden]) {
+  border-color: color-mix(in srgb, var(--line) 16%, transparent);
+}
+.bg-soft-yellow {
+  background-color: color-mix(in srgb, var(--yellow) 42%, transparent);
+}
+.bg-soft-yellow-strong {
+  background-color: color-mix(in srgb, var(--yellow) 36%, transparent);
+}
+
+/* 動きを減らす設定を尊重 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

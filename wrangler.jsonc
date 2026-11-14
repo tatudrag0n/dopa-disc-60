@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dopa-disc-60",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "kv_namespaces": [
+    {
+      "binding": "DOPA_KV",
+      "id": "d0b8f834926449f08a9e8f32f46aa8e0"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+
+  // ─── Cloudflare Access を使う場合（推奨） ──────────────────────────
+  // 1) 下の routes のコメントを外して独自ドメインで配信する
+  //    （Cloudflare Access は workers.dev では使えない）
+  // 2) ダッシュボード → Zero Trust → Access → Applications で
+  //    このホスト名を保護し、ポリシー（例: One-time PIN / Google）を設定
+  // 3) アプリの "Application Audience (AUD) Tag" をコピーして
+  //    `wrangler secret put ACCESS_AUD` で登録
+  // 4) `wrangler secret put ACCESS_TEAM_DOMAIN` に
+  //    "<チーム名>.cloudflareaccess.com" を登録
+  //
+  // "routes": [
+  //   { "pattern": "disc.mct-official.com", "custom_domain": true }
+  // ],
+  //
+  // "vars": {
+  //   "ACCESS_TEAM_DOMAIN": "yourteam.cloudflareaccess.com",
+  //   "ACCESS_AUD": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  // }
+}
