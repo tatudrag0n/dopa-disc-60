@@ -113,7 +113,7 @@ export default function App() {
       <header className="sticky top-0 z-40 border-b-[3px] border-[var(--line)] bg-[var(--bg)]">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
           <a href="#home" className="flex min-w-0 items-center gap-2">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-[var(--line)] bg-[var(--yellow)] text-[var(--ink)] shadow-[3px_3px_0_var(--line)] sm:h-10 sm:w-10">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-[var(--line)] bg-[var(--yellow)] text-[#1c1030] shadow-[3px_3px_0_var(--line)] sm:h-10 sm:w-10">
               <Disc3 className="h-4 w-4 sm:h-5 sm:w-5" />
             </span>
             <span className="min-w-0 leading-tight">
@@ -199,7 +199,7 @@ export default function App() {
               <p className="mt-4 max-w-lg text-sm font-bold leading-relaxed text-[var(--muted)] sm:text-base">
                 1筆で描いた形がそのまま円盤になる。円盤をぐるっと回して勢いをつけ、
                 上へスワイプすれば飛び出す。飛距離は
-                <span className="mx-1 rounded-md bg-[var(--yellow)] px-1.5 py-0.5 text-[var(--ink)]">
+                <span className="mx-1 rounded-md bg-[var(--yellow)] px-1.5 py-0.5 text-[#1c1030]">
                   形 × 回転 × 勢い
                 </span>
                 で決まる。スマホもPCもそのまま遊べます。
