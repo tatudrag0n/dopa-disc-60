@@ -253,22 +253,23 @@ export function DiscGame({ onFinish, resetKey, best = 0, onOpenRanking }: Props)
 
   /* ---------------- 入力 ---------------- */
 
+  // 入力はステージ全体で受ける（円盤レイヤーが上に重なっていても効くように）
   const pointFromEvent = useCallback((e: PointerEvent): Pt => {
-    const canvas = traceRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
+    const stage = stageRef.current;
+    if (!stage) return { x: 0, y: 0 };
+    const rect = stage.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }, []);
 
   useEffect(() => {
-    const canvas = traceRef.current;
-    if (!canvas) return;
+    const stage = stageRef.current;
+    if (!stage) return;
 
     const onDown = (e: PointerEvent) => {
       if (phase.current === "fly") return;
       e.preventDefault();
       try {
-        canvas.setPointerCapture(e.pointerId);
+        stage.setPointerCapture(e.pointerId);
       } catch {
         /* 合成イベントでは失敗するので無視 */
       }
@@ -319,7 +320,7 @@ export function DiscGame({ onFinish, resetKey, best = 0, onOpenRanking }: Props)
       if (!drawing.current) return;
       drawing.current = false;
       try {
-        canvas.releasePointerCapture(e.pointerId);
+        stage.releasePointerCapture(e.pointerId);
       } catch {
         /* noop */
       }
@@ -330,15 +331,15 @@ export function DiscGame({ onFinish, resetKey, best = 0, onOpenRanking }: Props)
       drawing.current = false;
     };
 
-    canvas.addEventListener("pointerdown", onDown);
-    canvas.addEventListener("pointermove", onMove);
-    canvas.addEventListener("pointerup", onUp);
-    canvas.addEventListener("pointercancel", onCancel);
+    stage.addEventListener("pointerdown", onDown);
+    stage.addEventListener("pointermove", onMove);
+    stage.addEventListener("pointerup", onUp);
+    stage.addEventListener("pointercancel", onCancel);
     return () => {
-      canvas.removeEventListener("pointerdown", onDown);
-      canvas.removeEventListener("pointermove", onMove);
-      canvas.removeEventListener("pointerup", onUp);
-      canvas.removeEventListener("pointercancel", onCancel);
+      stage.removeEventListener("pointerdown", onDown);
+      stage.removeEventListener("pointermove", onMove);
+      stage.removeEventListener("pointerup", onUp);
+      stage.removeEventListener("pointercancel", onCancel);
     };
   }, [drawDisc, drawTrace, evaluateShape, launch, pointFromEvent]);
 
@@ -452,7 +453,7 @@ export function DiscGame({ onFinish, resetKey, best = 0, onOpenRanking }: Props)
         <div className="game-ground" />
         <div className="game-horizon" />
         <canvas ref={traceRef} className="game-canvas" />
-        <canvas ref={discRef} className="game-canvas" />
+        <canvas ref={discRef} className="game-canvas game-disc" />
 
         <div className="game-info">
           <div className="game-msg">{message}</div>

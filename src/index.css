@@ -362,6 +362,16 @@ body.dopa-locked {
   height: 100%;
 }
 
+/* 円盤レイヤーはイベントを透過させる（原作の #discCanvas と同じ）。
+   これを忘れると上のキャンバスが入力を奪って描けなくなる。 */
+.game-disc {
+  pointer-events: none;
+}
+
+.game-stage {
+  cursor: crosshair;
+}
+
 .game-info {
   position: absolute;
   left: 0;
