@@ -7,7 +7,7 @@ type Screen = 'start' | 'playing' | 'result';
 type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string };
 type Phase = 'draw' | 'aim' | 'flying' | 'landed';
 type ShapeWeakest = 'wobble' | 'roughness' | 'balance' | 'area' | 'closure' | 'none'
-type ThrowResult = { distance: number; total: number; shapeGrade: string; shapeWeakest?: ShapeWeakest; balance: number; spin: number; spinSpeed: number; spinCleanliness: number; swipeSpeed: number; swipeNorm: number; isRecord?: boolean };
+type ThrowResult = { distance: number; total: number; shapeGrade: string; shapeWeakest?: ShapeWeakest; shapePhysics?: import('./lib/discPhysics').DiscPhysics; balance: number; spin: number; spinSpeed: number; spinCleanliness: number; swipeSpeed: number; swipeNorm: number; isRecord?: boolean };
 type Pt = { x: number; y: number };
 
 async function callApi(action: string, args: Record<string, unknown>) {
@@ -410,7 +410,7 @@ export default function App() {
       confettiRef.current = Array.from({ length: 42 }, (_, i) => ({ x: (pseudo(i, 21) - 0.5) * 220, y: -20 - pseudo(i, 23) * 60, vx: (pseudo(i, 29) - 0.5) * 1.6, vy: 1.2 + pseudo(i, 31) * 1.8, life: 0, max: 1.1 + pseudo(i, 37) * 0.7, color: colors[i % colors.length], size: 3 + pseudo(i, 41) * 4, rot: pseudo(i, 43) * 6, vr: (pseudo(i, 47) - 0.5) * 0.3 }));
       setTimeout(() => sfx('best'), 260);
     }
-    const rec: ThrowResult = { distance: rounded, total, shapeGrade: f.grade, shapeWeakest: shapeRef.current.physics?.weakest, balance: Math.round(f.balance), spin: f.spin, spinSpeed: f.spinSpeed, spinCleanliness: f.spinCleanliness, swipeSpeed: f.swipeSpeed, swipeNorm: f.swipeNorm, isRecord };
+    const rec: ThrowResult = { distance: rounded, total, shapeGrade: f.grade, shapeWeakest: shapeRef.current.physics?.weakest, shapePhysics: shapeRef.current.physics, balance: Math.round(f.balance), spin: f.spin, spinSpeed: f.spinSpeed, spinCleanliness: f.spinCleanliness, swipeSpeed: f.swipeSpeed, swipeNorm: f.swipeNorm, isRecord };
     setLastThrow(rec);
     setBest(rounded);
     setPhaseBoth('landed');
@@ -1175,7 +1175,19 @@ export default function App() {
       { label: tr('stat.accel'), value: swipeLabel(result.throw.swipeNorm), pct: accelN * 100, note: accelN >= 0.7 ? tr('accel.sharp') : accelN >= 0.4 ? tr('accel.justRight') : tr('accel.more') },
     ];
     const bestIdx = [shapeN, spinN, accelN].indexOf(Math.max(shapeN, spinN, accelN));
-    return { list, bestIdx };
+
+    const ph = result.throw.shapePhysics;
+    const shapeParams = ph
+      ? [
+          { label: tr('param.symmetry'), v: ph.wobble },
+          { label: tr('param.area'), v: ph.fill },
+          { label: tr('param.smoothness'), v: ph.smoothness },
+          { label: tr('param.balance'), v: ph.balance },
+        ]
+      : [];
+    const glide = ph ? ph.glide : 0;
+
+    return { list, bestIdx, shapeParams, glide };
   })() : null;
 
   return (
@@ -1334,7 +1346,33 @@ export default function App() {
               </div>
             </div>
 
-            <div className="mt-auto pt-8">
+            {resultFactors && resultFactors.shapeParams.length > 0 && (
+          <div className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4">
+            <h3 className="text-sm font-black">{tr('param.title')}</h3>
+            <div className="mt-2 space-y-2">
+              {resultFactors.shapeParams.map((p) => (
+                <div key={p.label} className="flex items-center gap-2">
+                  <span className="w-28 shrink-0 text-[11px] font-bold text-[var(--muted)]">{p.label}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-black/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-[#00e5ff] to-[#ff2e88]"
+                      style={{ width: `${Math.round(p.v * 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-10 shrink-0 text-right text-[11px] font-black tabular-nums">
+                    {Math.round(p.v * 100)}%
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[11px] font-bold text-[var(--muted)]">{tr('param.glide')}</span>
+                <span className="text-sm font-black tabular-nums">{resultFactors.glide.toFixed(1)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-auto pt-8">
               <button onClick={startGame} className={`${CTA} w-full py-5 text-[20px]`}><RotateCcw size={20} /> {tr('again')}</button>
               <button onClick={() => setScreen('start')} className="ghost-btn mx-auto mt-3 flex items-center justify-center gap-2 rounded-full bg-[var(--surface)] px-6 py-3 font-bold"><Home size={18} /> {tr('backToTitle')}</button>
             </div>

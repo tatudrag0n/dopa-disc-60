@@ -42,6 +42,8 @@ export interface DiscPhysics {
   offset: number;
   /** 質量バランス 1-offset */
   balance: number;
+  /** 外接円に対する面積の充填率 0..1 */
+  fill: number;
   /** 面積の妥当さ 1..0（小さすぎ・大きすぎを減点） */
   areaFactor: number;
   /** 揚力係数（近似） */
@@ -221,6 +223,7 @@ export function analyzeDisc(pts: Pt[]): DiscPhysics {
     smoothness,
     offset,
     balance,
+    fill,
     areaFactor,
     lift,
     drag,
