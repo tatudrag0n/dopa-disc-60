@@ -6,16 +6,17 @@
 
 - 本番: <https://discgame.mct-official.com>
 - リポジトリ: <https://github.com/tatudrag0n/dopa-disc-60>
-- 旧版（静的 `index.html` のみ）は git 履歴に残っています
 
 ## できること
 
 | 機能 | 内容 |
 | --- | --- |
 | スマホ / PC 対応 UI | Pointer Events で指・マウス・ペンを同一処理。`100dvh` + セーフエリア対応、モバイルは下部タブ、PC は上部ナビ |
+| 日本語 / 英語 | ブラウザ言語を自動判定。ヘッダーの `EN` / `JA` で即時切り替え |
 | ゲーム | 描く → 回す → 飛ばす の 3 ステップ。形の円らしさ・閉じ具合・大きさを評価 |
 | ランキング | 歴代 / 今日 / 今週 の 3 区分。上位 200 件を Cloudflare D1 に保持 |
-| 認証 | Cloudflare Access（Zero Trust）連携 + 内蔵アカウント（メール不要） |
+| ログイン不要 | パスワードもアカウントも無し。初回に**名前を決めるだけ**で端末に紐づく（30日） |
+| ボット判定 | Cloudflare Turnstile。スコア投稿時のみ検証し、遊ぶこと自体は誰でも可能 |
 | 不正対策 | 飛距離は**サーバー側で再計算**。クライアントの申告値は使わない |
 | PWA | マニフェスト + アイコン。ホーム画面に追加可能 |
 | テーマ | ライト / ダーク / OS 追従 |
@@ -28,13 +29,15 @@ src/
   App.tsx                画面全体（ヒーロー / ランキング / 使い方）
   game/engine.ts         ゲームロジック（純粋関数・採点）
   game/DiscGame.tsx      Canvas 描画と操作
-  components/            認証ダイアログ・ランキング・結果画面
+  components/            ランキング・結果画面・名前変更ダイアログ
+  lib/i18n.tsx           日本語 / 英語の辞書と Provider
+  lib/turnstile.ts       Turnstile ウィジェットのラッパー
+  lib/usePlayer.ts       名前（セッション）と設定の取得
   shared/types.ts        クライアントとワーカー共通の型と定数
-  lib/                   API クライアント・認証フック・テーマ
 worker/
   index.ts               ルーター（/api/*）
-  auth.ts                登録・ログイン・セッション
-  access.ts              Cloudflare Access の JWT 検証
+  auth.ts                名前だけのセッション（Cookie + KV）
+  turnstile.ts           ボット判定
   scores.ts              ランキングの読み書き（D1）とレート制限
   util.ts                Cookie・KV・日付ユーティリティ
 migrations/
@@ -42,7 +45,7 @@ migrations/
 ```
 
 - フロント: Vite + React 18 + TypeScript + Tailwind CSS 3
-- バックエンド: Cloudflare Workers（Static Assets + D1 + KV）
+- バックエンド: Cloudflare Workers（Static Assets + D1 + KV + Turnstile）
   - ランキング = D1（同時投稿でも記録が消えない）
   - セッション / レート制限 = KV（TTL 任せで消えてよいデータ）
 
@@ -50,8 +53,13 @@ migrations/
 
 最初は KV に 1 つの JSON ドキュメントとしてランキングを持たせていたが、
 **read-modify-write の競合でスコアが消失した**（同時に 4 件投稿すると最後の 1 件しか残らない）。
-D1 なら `INSERT` と `ON CONFLICT DO UPDATE` が原子的に効くため、
-同時投稿でも記録が落ちない。
+D1 なら `INSERT` と `ON CONFLICT DO UPDATE` が原子的に効くため、同時投稿でも記録が落ちない。
+
+### 認証をやめた理由
+
+当初 Cloudflare Access（Zero Trust + ワンタイムPIN）で全体を保護していたが、
+「遊ぶのにメール認証が要る」のは重すぎるため撤去した。
+いまは **名前を決めるだけ**で投稿でき、人間かどうかは Turnstile で判定する。
 
 ## ローカル開発
 
@@ -61,13 +69,12 @@ npm run dev        # http://localhost:5173 （/api は wrangler dev にプロキ
 npm run worker:dev # http://127.0.0.1:8787
 ```
 
+`TURNSTILE_SECRET` が未設定ならボット判定はスキップされるので、ローカルではそのままでよい。
+
 > Windows で `wrangler dev` が
 > `CreateDirectory: アクセスが拒否されました; path = miniflare-email-store`
-> で落ちる場合は、`--persist-to` で書き込み可能なディレクトリを指定してください。
->
-> ```bash
-> npx wrangler dev --persist-to C:\path\to\writable\dir
-> ```
+> で落ちる場合は、`--persist-to` で書き込み可能なディレクトリを指定する。
+> それでも直らない環境では、本番デプロイ後に API を叩いて検証している。
 
 型チェックとビルド:
 
@@ -82,8 +89,7 @@ npm run build
 npm run deploy     # build + wrangler deploy
 ```
 
-初回のみ、KV ネームスペースと D1 データベースを作成し、
-`wrangler.jsonc` の `id` / `database_id` を差し替えます。
+初回のみ、KV と D1 を作成し `wrangler.jsonc` の ID を差し替える。
 
 ```bash
 npx wrangler kv namespace create DOPA_KV
@@ -91,77 +97,44 @@ npx wrangler d1 create dopa-disc
 npx wrangler d1 execute dopa-disc --remote --file migrations/0001_scores.sql
 ```
 
-配信先は `wrangler.jsonc` の `routes` で指定します（現在は `discgame.mct-official.com`）。
-Cloudflare 側に DNS レコードと証明書が自動で作られます。
+配信先は `wrangler.jsonc` の `routes`（現在 `discgame.mct-official.com`）。
 
-CI からデプロイする場合は、リポジトリの Secrets に
-`CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` を登録し、
-Actions の `Deploy to Cloudflare` を手動実行してください。
-
-## Cloudflare Access（Zero Trust）で認証する
-
-**現在このサイトは Cloudflare Access で保護済み**（2026-11-15 設定）。
+## Cloudflare Turnstile（ボット判定）
 
 | 項目 | 値 |
 | --- | --- |
-| ホスト名 | `discgame.mct-official.com` |
-| チームドメイン | `tatudragon0327.cloudflareaccess.com` |
-| アプリ名 | `dopa-disc-60 (discgame)` |
-| ポリシー | Allow / Include: Everyone（One-time PIN = メール認証） |
-| セッション | 24 時間 |
+| ウィジェット名 | `dopa-disc-60` |
+| モード | Managed |
+| 対象ドメイン | `discgame.mct-official.com`, `localhost`, `127.0.0.1` |
+| サイトキー | `wrangler.jsonc` の `vars.TURNSTILE_SITEKEY`（公開情報） |
+| シークレット | `npx wrangler secret put TURNSTILE_SECRET` |
 
-未認証でアクセスすると `tatudragon0327.cloudflareaccess.com` のログイン画面へ 302 で飛び、
-メールに届くワンタイムコードを入力すると入場できる。認証後は `Cf-Access-Jwt-Assertion`
-が付与され、Worker が **JWKS で署名検証**して身元（メールアドレス）を採用する。
+ウィジェットは `execution: "execute"` + `appearance: "interaction-only"` で読み込み、
+スコア投稿の直前にだけトークンを作る。つまり**プレイ中は何も出ない**。
+`TURNSTILE_SECRET` を消せばボット判定は無効になり、誰でも投稿できる。
 
-### 設定をやり直す / 別ドメインに付ける場合
+> 検証を自動化するときは Cloudflare のテストキーが使える。
+> サイトキー `1x00000000000000000000AA` / シークレット `1x0000000000000000000000000000000AA`
+> は常に成功する。実キーのままだとヘッドレスブラウザは弾かれる。
 
-```bash
-# 1. Access アプリ作成（AUD が返る）
-curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps" \
-  -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
-  -d '{"name":"dopa-disc-60","domain":"discgame.mct-official.com","type":"self_hosted",
-       "session_duration":"24h","allowed_idps":["<one-time PIN の IdP ID>"],
-       "auto_redirect_to_identity":true}'
-
-# 2. ポリシー（全員許可）
-curl -X POST ".../access/apps/$APP_ID/policies" \
-  -d '{"name":"Allow everyone","decision":"allow","precedence":1,
-       "include":[{"everyone":{}}]}'
-
-# 3. Worker に秘密を登録（設定すると Access 連携が有効になる）
-npx wrangler secret put ACCESS_TEAM_DOMAIN   # tatudragon0327.cloudflareaccess.com
-npx wrangler secret put ACCESS_AUD           # 1 で返った aud
-```
-
-`ACCESS_TEAM_DOMAIN` / `ACCESS_AUD` が未設定なら Access 連携は自動的に無効になり、
-内蔵アカウント認証（PBKDF2 + HttpOnly Cookie）にフォールバックする。
-`GET /api/me` の `accessEnabled` で判定できる。
-
-### ハマりどころ（実際に踏んだもの）
-
-- **API トークンは Access の Edit 権限が必要。** Read だけだとアプリ作成が
-  `403 auth.forbidden`（code 1010）になる。読み取り系だけ通るので気づきにくい。
-- **Cloudflare の JWKS は `key_ops` が空配列で返る。** そのまま
-  `crypto.subtle.importKey("jwk", ...)` に渡すと DataError になり、署名検証が必ず失敗する
-  （`verified: false` になる）。`kty` / `n` / `e` / `alg` だけを取り出して import すること。
-- **サービストークンでテストする場合**、ポリシーの `decision` は `allow` ではなく
-  **`non_identity`** にする必要がある。`allow` だとログイン画面の HTML が 200 で返ってくる。
 ## API
 
 | メソッド | パス | 説明 |
 | --- | --- | --- |
-| GET | `/api/health` | 死活確認 |
-| GET | `/api/me` | ログイン中の身元と Access 有効/無効 |
-| POST | `/api/auth/register` | `{ name, password }` で登録 |
-| POST | `/api/auth/login` | `{ name, password }` でログイン |
-| POST | `/api/auth/logout` | セッション破棄 |
+| GET | `/api/health` | 死活確認（Turnstile 有効/無効も返す） |
+| GET | `/api/config` | Turnstile のサイトキー |
+| GET | `/api/me` | 名前が決まっていれば `{ user: { name } }` |
+| POST | `/api/me/name` | `{ name }` で表示名を変更 |
+| POST | `/api/logout` | セッション破棄（名前を忘れる） |
 | GET | `/api/leaderboard?range=all\|today\|week&limit=50` | ランキング取得 |
-| POST | `/api/scores` | `{ shapeScore, rot, mom }` を投稿（要ログイン） |
+| POST | `/api/scores` | `{ shapeScore, rot, mom, name?, turnstileToken? }` を投稿 |
+
+初回投稿時は `name` が必須で、成功すると `dopa_sess` Cookie が発行される。
+2 回目以降は Cookie から名前が引き継がれる。
 
 ## ゲームバランス
 
-`src/shared/types.ts` の定数がクライアントとワーカーで共有されます。
+`src/shared/types.ts` の定数がクライアントとワーカーで共有される。
 
 ```
 accel    = clamp(mom / 60 + rot / 1200, 0.4, 2.2)
@@ -174,6 +147,16 @@ distance = clamp((shapeScore/100) * (rot/100) * accel * 42, 8, 180)
 
 サーバーは同じ式で距離を確定するため、通信内容を書き換えても記録は伸びません。
 投稿は 1 分あたり 12 回までに制限しています。
+
+## ハマりどころ（実際に踏んだもの）
+
+- **Tailwind v3 は `bg-[var(--x)]/40` を生成せず黙って捨てる。** 半透明にしたい箇所は
+  `color-mix` を使ったユーティリティ（`.line-soft` / `.bg-soft-yellow` など）で代替している。
+- **wrangler の `compatibility_date` が未来日だと起動しない**（`future and unsupported`）。
+- **wrangler 4.15x は `@cloudflare/workers-types@^5` を要求する**（v4 だと npm install が競合）。
+- かつて Cloudflare Access を使っていた名残で、Access の JWKS は `key_ops` が空配列で返り、
+  そのまま `crypto.subtle.importKey("jwk", ...)` に渡すと DataError になる。
+  Access を再導入する場合は `kty` / `n` / `e` / `alg` だけを取り出して import すること。
 
 ## ライセンス
 

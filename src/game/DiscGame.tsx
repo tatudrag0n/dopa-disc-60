@@ -12,6 +12,7 @@ import {
   type SpinState,
 } from "./engine";
 import { ROT_MAX } from "../shared/types";
+import { useI18n, type MessageKey } from "../lib/i18n";
 
 type Phase = "draw" | "spin" | "fly";
 
@@ -36,6 +37,7 @@ interface Hud {
 const HUD_INTERVAL_MS = 70;
 
 export function DiscGame({ onFinish, onExit, resetKey, best = 0 }: Props) {
+  const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -544,18 +546,18 @@ export function DiscGame({ onFinish, onExit, resetKey, best = 0 }: Props) {
           type="button"
           onClick={onExit}
           className="pointer-events-auto grid h-11 w-11 place-items-center rounded-full bg-white/90 text-[#12122b] shadow-lg ring-2 ring-black/10 transition active:scale-95"
-          aria-label="ゲームをやめる"
+          aria-label={t("game.quit")}
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
 
         <div className="flex flex-col items-end gap-2">
           <span className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-black tracking-wider text-[#12122b] shadow">
-            {phaseLabel(hud.phase)}
+            {phaseLabel(t, hud.phase)}
           </span>
           {best > 0 && (
             <span className="rounded-full bg-black/35 px-3 py-1 text-[11px] font-black text-white backdrop-blur">
-              BEST {best.toFixed(1)}m
+              {t("game.best", { v: best.toFixed(1) })}
             </span>
           )}
         </div>
@@ -567,14 +569,14 @@ export function DiscGame({ onFinish, onExit, resetKey, best = 0 }: Props) {
         style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
       >
         <p className="rounded-full bg-black/45 px-4 py-2 text-center text-sm font-bold text-white backdrop-blur-md">
-          {helpText(hud.phase, hud.mom)}
+          {helpText(t, hud.phase, hud.mom)}
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <Pill label="形" value={hud.phase === "draw" ? "—" : `${hud.shapeScore}%`} />
-          <Pill label="回転" value={hud.phase === "draw" ? "—" : `${hud.rot}`} />
+          <Pill label={t("game.stat.shape")} value={hud.phase === "draw" ? "—" : `${hud.shapeScore}%`} />
+          <Pill label={t("game.stat.rot")} value={hud.phase === "draw" ? "—" : `${hud.rot}`} />
           <Pill
-            label="勢い"
+            label={t("game.stat.mom")}
             value={hud.phase === "draw" ? "—" : `${hud.mom}%`}
             meter={hud.mom / 100}
           />
@@ -587,15 +589,15 @@ export function DiscGame({ onFinish, onExit, resetKey, best = 0 }: Props) {
             className="mt-1 flex w-full max-w-sm items-center justify-center gap-2 rounded-2xl bg-[var(--pink)] px-6 py-4 text-lg font-black text-white shadow-[0_6px_0_#12122b] transition active:translate-y-1 active:shadow-[0_2px_0_#12122b]"
           >
             <Zap className="h-5 w-5" />
-            飛ばす
-            {hud.mom < 20 && <span className="text-xs font-bold opacity-70">（勢い不足）</span>}
+            {t("game.throw")}
+            {hud.mom < 20 && <span className="text-xs font-bold opacity-70">{t("game.lowMomentum")}</span>}
           </button>
         )}
 
         {hud.phase === "draw" && (
           <div className="flex items-center gap-2 text-[11px] font-bold text-white/80">
             <Sparkles className="h-3.5 w-3.5" />
-            1筆で円を描くほど高スコア
+            {t("game.drawTip")}
           </div>
         )}
       </div>
@@ -605,7 +607,7 @@ export function DiscGame({ onFinish, onExit, resetKey, best = 0 }: Props) {
         type="button"
         onClick={retry}
         className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/60 text-[#12122b] backdrop-blur transition active:scale-95"
-        aria-label="やり直す"
+        aria-label={t("game.reset")}
       >
         <RotateCcw className="h-4 w-4" />
       </button>
@@ -630,20 +632,22 @@ function Pill({ label, value, meter }: { label: string; value: string; meter?: n
   );
 }
 
-function phaseLabel(phase: Phase): string {
-  if (phase === "draw") return "STEP 1 / 2";
-  if (phase === "spin") return "STEP 2 / 2";
-  return "FLYING";
+type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
+
+function phaseLabel(t: Translate, phase: Phase): string {
+  if (phase === "draw") return t("game.step1");
+  if (phase === "spin") return t("game.step2");
+  return t("game.flying");
 }
 
-function helpText(phase: Phase, mom: number): string {
-  if (phase === "draw") return "円盤の形を1筆で描いてね";
+function helpText(t: Translate, phase: Phase, mom: number): string {
+  if (phase === "draw") return t("game.drawHint");
   if (phase === "spin") {
-    if (mom >= 55) return "いい勢い！そのまま上へスワイプ";
-    if (mom >= 20) return "ぐるっと回して上へスワイプ！（ボタンでもOK）";
-    return "円盤のまわりをぐるぐる回して勢いをつけよう";
+    if (mom >= 55) return t("game.spinHintHigh");
+    if (mom >= 20) return t("game.spinHintMid");
+    return t("game.spinHintLow");
   }
-  return "ビュッと飛んでる！";
+  return t("game.flyHint");
 }
 
 function easeOut(p: number): number {

@@ -4,11 +4,9 @@ import {
   Disc3,
   Github,
   Home,
-  LogIn,
-  LogOut,
+  Languages,
   Moon,
   Play,
-  ShieldCheck,
   Sun,
   Trophy,
   UserRound,
@@ -16,11 +14,12 @@ import {
 } from "lucide-react";
 import { DiscGame } from "./game/DiscGame";
 import type { PlayResult } from "./game/engine";
-import { AuthDialog } from "./components/AuthDialog";
 import { Leaderboard } from "./components/Leaderboard";
+import { NameDialog } from "./components/NameDialog";
 import { ResultOverlay } from "./components/ResultOverlay";
-import { useAuth } from "./lib/useAuth";
+import { usePlayer } from "./lib/usePlayer";
 import { useTheme } from "./lib/theme";
+import { useI18n, type MessageKey } from "./lib/i18n";
 import { DIST_MAX } from "./shared/types";
 
 const BEST_KEY = "dopa_best_v2";
@@ -34,18 +33,18 @@ function readBest(): number {
 }
 
 export default function App() {
-  const { user, accessEnabled, loading, refresh, signOut, setUser } = useAuth();
+  const { user, siteKey, loading, refresh, setUser } = usePlayer();
+  const { lang, toggle: toggleLang, t } = useI18n();
   const { theme, toggle } = useTheme();
 
   const [playing, setPlaying] = useState(false);
   const [result, setResult] = useState<PlayResult | null>(null);
   const [resetKey, setResetKey] = useState(0);
-  const [authOpen, setAuthOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
   const [best, setBest] = useState(readBest);
   const [prevBest, setPrevBest] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // ゲーム中はページスクロールを封じる
   useEffect(() => {
     document.body.classList.toggle("dopa-locked", playing || result !== null);
     return () => document.body.classList.remove("dopa-locked");
@@ -60,21 +59,24 @@ export default function App() {
     });
   }, []);
 
-  const handleFinish = useCallback((r: PlayResult) => {
-    setPrevBest(best);
-    setResult(r);
-    setBest((prev) => {
-      if (r.distance > prev) {
-        try {
-          localStorage.setItem(BEST_KEY, String(r.distance));
-        } catch {
-          /* noop */
+  const handleFinish = useCallback(
+    (r: PlayResult) => {
+      setPrevBest(best);
+      setResult(r);
+      setBest((prev) => {
+        if (r.distance > prev) {
+          try {
+            localStorage.setItem(BEST_KEY, String(r.distance));
+          } catch {
+            /* noop */
+          }
+          return r.distance;
         }
-        return r.distance;
-      }
-      return prev;
-    });
-  }, [best]);
+        return prev;
+      });
+    },
+    [best],
+  );
 
   const handleRetry = useCallback(() => {
     setResult(null);
@@ -89,15 +91,16 @@ export default function App() {
 
   const handleSubmitted = useCallback(() => {
     setRefreshKey((k) => k + 1);
-  }, []);
+    void refresh();
+  }, [refresh]);
 
   const bestRatio = useMemo(() => Math.min(100, (best / DIST_MAX) * 100), [best]);
 
-  const navItems = [
-    { id: "home", label: "ホーム", icon: Home },
-    { id: "play", label: "あそぶ", icon: Play },
-    { id: "ranking", label: "ランキング", icon: Trophy },
-    { id: "howto", label: "つかいかた", icon: BookOpen },
+  const navItems: { id: string; label: MessageKey; icon: typeof Home }[] = [
+    { id: "home", label: "nav.home", icon: Home },
+    { id: "play", label: "nav.play", icon: Play },
+    { id: "ranking", label: "nav.ranking", icon: Trophy },
+    { id: "howto", label: "nav.howto", icon: BookOpen },
   ];
 
   return (
@@ -121,19 +124,19 @@ export default function App() {
                 DOPA DISC
               </span>
               <span className="block truncate whitespace-nowrap text-[13px] font-black sm:text-base">
-                フライングディスク
+                {t("app.title")}
               </span>
             </span>
           </a>
 
-          <nav className="hidden items-center gap-1 md:flex" aria-label="メインナビゲーション">
+          <nav className="hidden items-center gap-1 md:flex" aria-label="navigation">
             {navItems.map((item) => (
               <a
                 key={item.id}
                 href={`#${item.id}`}
                 className="rounded-full px-3 py-1.5 text-xs font-black text-[var(--muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
               >
-                {item.label}
+                {t(item.label)}
               </a>
             ))}
           </nav>
@@ -141,43 +144,36 @@ export default function App() {
           <div className="flex items-center gap-1.5">
             <button
               type="button"
+              onClick={toggleLang}
+              className="flex h-9 items-center gap-1 rounded-full border-2 border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-black"
+              aria-label={t("lang.label")}
+            >
+              <Languages className="h-3.5 w-3.5" />
+              {lang === "ja" ? "EN" : "JA"}
+            </button>
+
+            <button
+              type="button"
               onClick={toggle}
               className="grid h-9 w-9 place-items-center rounded-full border-2 border-[var(--line)] bg-[var(--surface)]"
-              aria-label={theme === "dark" ? "ライトテーマに切り替え" : "ダークテーマに切り替え"}
+              aria-label={theme === "dark" ? t("theme.toLight") : t("theme.toDark")}
             >
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
 
             {loading ? (
-              <span className="h-9 w-20 animate-pulse rounded-full bg-[var(--surface-2)]" />
+              <span className="h-9 w-16 animate-pulse rounded-full bg-[var(--surface-2)]" />
             ) : user ? (
-              <div className="flex items-center gap-1.5">
-                <span className="flex max-w-[5.5rem] items-center gap-1 rounded-full border-2 border-[var(--line)] bg-[var(--surface)] px-2 py-1.5 sm:max-w-[9rem] sm:gap-1.5 sm:px-2.5">
-                  {user.via === "cloudflare-access" ? (
-                    <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[var(--green)]" />
-                  ) : (
-                    <UserRound className="h-3.5 w-3.5 shrink-0 text-[var(--pink)]" />
-                  )}
-                  <span className="truncate text-[11px] font-black sm:text-xs">{user.name}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void signOut()}
-                  className="grid h-9 w-9 place-items-center rounded-full border-2 border-[var(--line)] bg-[var(--surface)]"
-                  aria-label="ログアウト"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
               <button
                 type="button"
-                onClick={() => setAuthOpen(true)}
-                className="flex items-center gap-1.5 rounded-full border-2 border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-black shadow-[3px_3px_0_var(--line)]"
+                onClick={() => setRenameOpen(true)}
+                className="flex max-w-[5.5rem] items-center gap-1 rounded-full border-2 border-[var(--line)] bg-[var(--surface)] px-2 py-1.5 sm:max-w-[9rem] sm:gap-1.5 sm:px-2.5"
+                aria-label={t("name.change")}
               >
-                <LogIn className="h-3.5 w-3.5" /> ログイン
+                <UserRound className="h-3.5 w-3.5 shrink-0 text-[var(--pink)]" />
+                <span className="truncate text-[11px] font-black sm:text-xs">{user.name}</span>
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
@@ -188,21 +184,20 @@ export default function App() {
           <div className="grid items-center gap-8 lg:grid-cols-[1.05fr_.95fr]">
             <div>
               <p className="inline-flex items-center gap-2 rounded-full bg-[var(--cyan)] px-3 py-1 text-[11px] font-black text-[#0b1622] ring-2 ring-[var(--line)]">
-                <Zap className="h-3.5 w-3.5" /> 描いて、回して、飛ばす
+                <Zap className="h-3.5 w-3.5" /> {t("app.tagline")}
               </p>
 
               <h1 className="display-font mt-4 text-[clamp(2.3rem,8.5vw,4.2rem)] font-black leading-[1.02]">
-                フライング
-                <span className="block text-[var(--pink)]">ディスク</span>
+                {t("app.titleLine1")}
+                <span className="block text-[var(--pink)]">{t("app.titleLine2")}</span>
               </h1>
 
               <p className="mt-4 max-w-lg text-sm font-bold leading-relaxed text-[var(--muted)] sm:text-base">
-                1筆で描いた形がそのまま円盤になる。円盤をぐるっと回して勢いをつけ、
-                上へスワイプすれば飛び出す。飛距離は
+                {t("app.heroLead")}
                 <span className="mx-1 rounded-md bg-[var(--yellow)] px-1.5 py-0.5 text-[#1c1030]">
-                  形 × 回転 × 勢い
+                  {t("app.formula")}
                 </span>
-                で決まる。スマホもPCもそのまま遊べます。
+                {t("app.heroLeadTail")}
               </p>
 
               <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:items-center">
@@ -211,14 +206,14 @@ export default function App() {
                   onClick={startGame}
                   className="btn-3d play-btn flex min-h-[60px] items-center justify-center gap-3 rounded-2xl px-7 text-lg font-black sm:min-h-[64px] sm:text-xl"
                 >
-                  <Play className="h-6 w-6" /> あそぶ
+                  <Play className="h-6 w-6" /> {t("common.play")}
                 </button>
 
                 <a
                   href="#ranking"
                   className="btn-3d flex min-h-[60px] items-center justify-center gap-2 rounded-2xl bg-[var(--surface)] px-6 text-base font-black sm:min-h-[64px]"
                 >
-                  <Trophy className="h-5 w-5" /> ランキング
+                  <Trophy className="h-5 w-5" /> {t("common.ranking")}
                 </a>
               </div>
 
@@ -226,7 +221,7 @@ export default function App() {
                 <div className="mt-5 rounded-2xl border-2 border-[var(--line)] bg-[var(--surface)] p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-black tracking-wider text-[var(--muted)]">
-                      あなたの自己ベスト
+                      {t("hero.best")}
                     </span>
                     <span className="text-lg font-black tabular-nums text-[var(--pink)]">
                       {best.toFixed(1)}m
@@ -242,28 +237,22 @@ export default function App() {
               )}
             </div>
 
-            {/* ビジュアル */}
             <div className="relative mx-auto w-full max-w-sm">
               <div className="relative aspect-square overflow-hidden rounded-[32px] border-[3px] border-[var(--line)] bg-gradient-to-b from-[#0f7bff] via-[#38a9ff] to-[#3ff07a] shadow-[8px_8px_0_var(--line)]">
                 <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-b from-[#3ff07a] to-[#0fb04a]" />
                 <div className="absolute inset-x-0 top-[58%] h-px bg-white/60" />
                 <div className="floaty absolute left-1/2 top-[54%] -translate-x-1/2 -translate-y-1/2">
                   <div className="relative h-24 w-48 sm:h-28 sm:w-56">
-                    {/* 円盤の影 */}
                     <div className="absolute inset-x-4 bottom-0 h-4 rounded-[50%] bg-black/25 blur-[2px]" />
-                    {/* 円盤本体（側面ドーム） */}
                     <div className="absolute inset-x-0 top-2 h-[62%] rounded-[50%] bg-gradient-to-br from-[#ff9a00] via-[#ff2e8a] to-[#7b2eff] shadow-[0_14px_26px_rgba(0,0,0,.3)]" />
-                    {/* 上面ハイライト */}
                     <div className="absolute inset-x-3 top-1 h-[46%] rounded-[50%] bg-gradient-to-b from-white/45 to-transparent" />
-                    {/* リム */}
                     <div className="absolute inset-x-0 top-[52%] h-2 rounded-[50%] bg-[#7b2eff]/70" />
-                    {/* 表面ライン */}
                     <div className="absolute inset-x-7 top-[34%] h-[3px] rounded-full bg-white/90" />
                     <div className="absolute right-11 top-[31%] h-2 w-2 rounded-full bg-white" />
                   </div>
                 </div>
                 <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/35 px-3 py-1 text-[10px] font-black tracking-widest text-white backdrop-blur">
-                  DRAW → SPIN → FLY
+                  {t("hero.diagram")}
                 </div>
               </div>
             </div>
@@ -272,33 +261,35 @@ export default function App() {
 
         {/* ---------------- あそぶ ---------------- */}
         <section id="play" className="scroll-mt-20 pt-12">
-          <SectionHeading icon={<Play className="h-5 w-5" />} title="あそぶ" />
+          <SectionHeading icon={<Play className="h-5 w-5" />} title={t("play.heading")} />
           <div className="card mt-3 overflow-hidden rounded-3xl">
             <div className="grid gap-0 sm:grid-cols-3">
-              {[
-                { n: "01", t: "描く", d: "円盤になる形を1筆で。きれいな円ほど高スコア。" },
-                { n: "02", t: "回す", d: "円盤のまわりをぐるぐる。回転と勢いが伸びる。" },
-                { n: "03", t: "飛ばす", d: "上へスワイプ、または「飛ばす」ボタン。" },
-              ].map((s) => (
+              {(
+                [
+                  { n: "01", k: "play.step1" },
+                  { n: "02", k: "play.step2" },
+                  { n: "03", k: "play.step3" },
+                ] as const
+              ).map((s) => (
                 <div key={s.n} className="p-4 sm:p-5">
                   <p className="text-2xl font-black text-[var(--pink)]">{s.n}</p>
-                  <h3 className="mt-1 text-base font-black">{s.t}</h3>
+                  <h3 className="mt-1 text-base font-black">{t(`${s.k}.title` as MessageKey)}</h3>
                   <p className="mt-1 text-xs font-bold leading-relaxed text-[var(--muted)]">
-                    {s.d}
+                    {t(`${s.k}.desc` as MessageKey)}
                   </p>
                 </div>
               ))}
             </div>
-            <div className="border-t-2 border-dashed line-soft bg-[var(--surface-2)] p-4">
+            <div className="border-t-2 border-dashed border-[var(--line)] bg-[var(--surface-2)] p-4 line-soft">
               <button
                 type="button"
                 onClick={startGame}
                 className="btn-3d play-btn flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-base font-black"
               >
-                <Play className="h-5 w-5" /> ゲームをはじめる
+                <Play className="h-5 w-5" /> {t("play.start")}
               </button>
               <p className="mt-2 text-center text-[11px] font-bold text-[var(--muted)]">
-                PC ではマウスドラッグ + Space キーでも遊べます
+                {t("play.keyboardHint")}
               </p>
             </div>
           </div>
@@ -306,11 +297,11 @@ export default function App() {
 
         {/* ---------------- ランキング ---------------- */}
         <section id="ranking" className="scroll-mt-20 pt-12">
-          <SectionHeading icon={<Trophy className="h-5 w-5" />} title="ランキング" />
+          <SectionHeading icon={<Trophy className="h-5 w-5" />} title={t("ranking.heading")} />
           <div className="mt-3">
             <Leaderboard
               user={user}
-              onRequireAuth={() => setAuthOpen(true)}
+              onRequireName={() => setRenameOpen(false)}
               refreshKey={refreshKey}
             />
           </div>
@@ -318,74 +309,36 @@ export default function App() {
 
         {/* ---------------- つかいかた ---------------- */}
         <section id="howto" className="scroll-mt-20 pt-12">
-          <SectionHeading icon={<BookOpen className="h-5 w-5" />} title="つかいかた" />
+          <SectionHeading icon={<BookOpen className="h-5 w-5" />} title={t("howto.heading")} />
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <article className="card rounded-2xl p-4">
-              <h3 className="flex items-center gap-2 text-sm font-black">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--pink)] text-[11px] text-white">
-                  1
-                </span>
-                円盤の形を描く
-              </h3>
-              <p className="mt-2 text-xs font-bold leading-relaxed text-[var(--muted)]">
-                指（またはマウス）で1筆の円を描きます。円に近いほど「形」のスコアが上がります。
-                大きすぎ・小さすぎは減点。25% 未満だとほぼ飛びません。
-              </p>
-            </article>
-
-            <article className="card rounded-2xl p-4">
-              <h3 className="flex items-center gap-2 text-sm font-black">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--violet)] text-[11px] text-white">
-                  2
-                </span>
-                回して勢いをつける
-              </h3>
-              <p className="mt-2 text-xs font-bold leading-relaxed text-[var(--muted)]">
-                円盤のまわりをぐるぐる回すと「回転」と「勢い」が上がります。
-                勢いは時間とともに減るので、回し終わったらすぐ飛ばしましょう。
-              </p>
-            </article>
-
-            <article className="card rounded-2xl p-4">
-              <h3 className="flex items-center gap-2 text-sm font-black">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--cyan)] text-[11px] text-[#0b1622]">
-                  3
-                </span>
-                飛ばす
-              </h3>
-              <p className="mt-2 text-xs font-bold leading-relaxed text-[var(--muted)]">
-                上方向へスワイプするか、「飛ばす」ボタンを押します。PC では Space / Enter
-                でも飛びます。<kbd className="rounded bg-[var(--surface-2)] px-1">R</kbd>{" "}
-                でやり直し、<kbd className="rounded bg-[var(--surface-2)] px-1">Esc</kbd>{" "}
-                でゲームを終了。
-              </p>
-            </article>
-
-            <article className="card rounded-2xl p-4">
-              <h3 className="flex items-center gap-2 text-sm font-black">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--yellow)] text-[11px] text-[#1c1030]">
-                  4
-                </span>
-                ランキングに登録
-              </h3>
-              <p className="mt-2 text-xs font-bold leading-relaxed text-[var(--muted)]">
-                {accessEnabled
-                  ? "このサイトは Cloudflare Access で保護されています。認証済みならスコアは自動で登録されます。"
-                  : "ログインしていればスコアは自動でランキングに登録されます。飛距離はサーバー側で再計算されるため、改造しても記録は伸びません。"}
-              </p>
-            </article>
+            {([1, 2, 3, 4] as const).map((n) => {
+              const colors = ["bg-[var(--pink)]", "bg-[var(--violet)]", "bg-[var(--cyan)]", "bg-[var(--yellow)]"];
+              const textColors = ["", "", "text-[#0b1622]", "text-[#1c1030]"];
+              return (
+                <article key={n} className="card rounded-2xl p-4">
+                  <h3 className="flex items-center gap-2 text-sm font-black">
+                    <span
+                      className={`grid h-6 w-6 place-items-center rounded-full text-[11px] text-white ${colors[n - 1]} ${textColors[n - 1]}`}
+                    >
+                      {n}
+                    </span>
+                    {t(`howto.${n}.title` as MessageKey)}
+                  </h3>
+                  <p className="mt-2 text-xs font-bold leading-relaxed text-[var(--muted)]">
+                    {t(`howto.${n}.desc` as MessageKey)}
+                  </p>
+                </article>
+              );
+            })}
           </div>
         </section>
       </main>
 
       <footer className="mx-auto w-full max-w-5xl px-4 pb-24 pt-2 text-center sm:px-6 sm:pb-10">
         <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] font-bold text-[var(--muted)]">
-          <span>フライングディスク - ドパ仕様</span>
+          <span>{t("app.title")}</span>
           <span aria-hidden="true">・</span>
-          <span className="inline-flex items-center gap-1">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            {accessEnabled ? "Cloudflare Access 保護" : "Cloudflare Workers"}
-          </span>
+          <span>Cloudflare Turnstile</span>
           <span aria-hidden="true">・</span>
           <a
             href="https://github.com/tatudrag0n/dopa-disc-60"
@@ -402,7 +355,7 @@ export default function App() {
       <nav
         className="fixed inset-x-0 bottom-0 z-40 border-t-[3px] border-[var(--line)] bg-[var(--bg)] md:hidden"
         style={{ paddingBottom: "var(--safe-area-inset-bottom)" }}
-        aria-label="モバイルナビゲーション"
+        aria-label="navigation"
       >
         <div className="mx-auto flex max-w-md items-stretch justify-around">
           {navItems.map((item) => {
@@ -414,7 +367,7 @@ export default function App() {
                 className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-black text-[var(--muted)] transition active:text-[var(--pink)]"
               >
                 <Icon className="h-5 w-5" />
-                {item.label}
+                {t(item.label)}
               </a>
             );
           })}
@@ -438,21 +391,23 @@ export default function App() {
         <ResultOverlay
           result={result}
           user={user}
-          accessEnabled={accessEnabled}
+          siteKey={siteKey}
           personalBest={prevBest}
           onRetry={handleRetry}
           onHome={handleHome}
-          onRequireAuth={() => setAuthOpen(true)}
+          onPlayerCreated={(name) => {
+            setUser({ name });
+          }}
           onSubmitted={handleSubmitted}
         />
       )}
 
-      <AuthDialog
-        open={authOpen}
-        accessEnabled={accessEnabled}
-        onClose={() => setAuthOpen(false)}
-        onAuthed={(u) => {
-          setUser(u);
+      <NameDialog
+        open={renameOpen}
+        initialName={user?.name ?? ""}
+        onClose={() => setRenameOpen(false)}
+        onSaved={(name) => {
+          setUser({ name });
           void refresh();
         }}
       />

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, LogIn, RefreshCw, Trophy } from "lucide-react";
+import { Loader2, RefreshCw, Trophy, UserRound } from "lucide-react";
 import { ApiError, fetchLeaderboard } from "../lib/api";
-import { RANGE_LABEL, SCORE_RANGES, type LeaderboardResponse, type ScoreRange } from "../shared/types";
-import type { AuthUser } from "../lib/useAuth";
+import { SCORE_RANGES, type LeaderboardResponse, type ScoreRange } from "../shared/types";
+import { useI18n } from "../lib/i18n";
+import type { Player } from "../lib/usePlayer";
 
 interface Props {
-  user: AuthUser | null;
-  onRequireAuth: () => void;
+  user: Player | null;
+  onRequireName: () => void;
   /** この値が変わると再取得する（スコア更新時） */
   refreshKey?: number;
   limit?: number;
@@ -14,7 +15,8 @@ interface Props {
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }: Props) {
+export function Leaderboard({ user, onRequireName, refreshKey = 0, limit = 50 }: Props) {
+  const { t } = useI18n();
   const [range, setRange] = useState<ScoreRange>("all");
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,15 +27,14 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
       setLoading(true);
       setError(null);
       try {
-        const res = await fetchLeaderboard(r, limit);
-        setData(res);
+        setData(await fetchLeaderboard(r, limit));
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "ランキングの取得に失敗しました");
+        setError(err instanceof ApiError ? err.message : t("error.network"));
       } finally {
         setLoading(false);
       }
     },
-    [limit],
+    [limit, t],
   );
 
   useEffect(() => {
@@ -42,22 +43,26 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
 
   const entries = data?.entries ?? [];
   const myId = data?.me?.entry.id ?? null;
+  const rangeLabel = t(`ranking.range.${range}` as "ranking.range.all");
 
   return (
-    <section aria-labelledby="leaderboard-title" className="card rounded-3xl overflow-hidden">
+    <section aria-labelledby="leaderboard-title" className="card overflow-hidden rounded-3xl">
       <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--violet)] px-4 py-3 text-white sm:px-5">
-        <h2 id="leaderboard-title" className="flex items-center gap-2 text-base font-black sm:text-lg">
-          <Trophy className="h-5 w-5" /> {RANGE_LABEL[range]}ランキング
+        <h2
+          id="leaderboard-title"
+          className="flex items-center gap-2 text-base font-black sm:text-lg"
+        >
+          <Trophy className="h-5 w-5" /> {t("ranking.titleOf", { range: rangeLabel })}
         </h2>
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-black">
-            {entries.length}人
+            {t("ranking.players", { n: entries.length })}
           </span>
           <button
             type="button"
             onClick={() => void load(range)}
             className="grid h-8 w-8 place-items-center rounded-full bg-white/20 transition hover:bg-white/30"
-            aria-label="再読み込み"
+            aria-label={t("common.reload")}
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </button>
@@ -78,18 +83,20 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
                 : "bg-[var(--surface)] text-[var(--muted)]"
             }`}
           >
-            {RANGE_LABEL[r]}
+            {t(`ranking.range.${r}` as "ranking.range.all")}
           </button>
         ))}
       </div>
 
       {data?.me && (
-        <div className="flex items-center justify-between gap-3 border-y-2 border-dashed line-soft bg-[var(--surface-2)] px-4 py-2.5">
-          <span className="text-xs font-black text-[var(--muted)]">あなたのベスト</span>
+        <div className="flex items-center justify-between gap-3 border-y-2 border-dashed border-[var(--line)] px-4 py-2.5 line-soft">
+          <span className="text-xs font-black text-[var(--muted)]">{t("ranking.yourBest")}</span>
           <span className="flex items-center gap-2 text-sm font-black">
             <b className="text-[var(--pink)]">{data.me.entry.distance.toFixed(1)}m</b>
             <span className="rounded-full bg-[var(--yellow)] px-2 py-0.5 text-[11px] text-[#1c1030]">
-              {data.me.rank > 0 ? `${data.me.rank}位` : "圏外"}
+              {data.me.rank > 0
+                ? t("ranking.rank", { n: data.me.rank })
+                : t("ranking.outOfRange")}
             </span>
           </span>
         </div>
@@ -121,9 +128,9 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
                   {e.name}
                 </span>
                 <span
-                  className={`font-black tabular-nums ${
-                    top ? "text-base" : "text-sm"
-                  } ${isMe ? "text-[#1c1030]" : "text-[var(--pink)]"}`}
+                  className={`font-black tabular-nums ${top ? "text-base" : "text-sm"} ${
+                    isMe ? "text-[#1c1030]" : "text-[var(--pink)]"
+                  }`}
                 >
                   {e.distance.toFixed(1)}
                   <span className="text-[9px]">m</span>
@@ -137,7 +144,7 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
       <div className="max-h-[420px] overflow-y-auto overscroll-contain">
         {loading && entries.length === 0 && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm font-bold text-[var(--muted)]">
-            <Loader2 className="h-4 w-4 animate-spin" /> 読み込み中…
+            <Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}
           </div>
         )}
 
@@ -149,16 +156,16 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
               onClick={() => void load(range)}
               className="btn-3d mt-3 rounded-xl bg-[var(--surface-2)] px-4 py-2 text-xs font-black"
             >
-              再試行
+              {t("common.retry")}
             </button>
           </div>
         )}
 
         {!loading && !error && entries.length === 0 && (
           <div className="px-4 py-10 text-center">
-            <p className="text-sm font-black">まだ記録がありません</p>
+            <p className="text-sm font-black">{t("ranking.empty.title")}</p>
             <p className="mt-1 text-xs font-bold text-[var(--muted)]">
-              1位になって名前を刻もう。
+              {t("ranking.empty.desc")}
             </p>
           </div>
         )}
@@ -166,7 +173,6 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
         {entries.length > 3 && (
           <ol className="divide-y-2 divide-dashed divide-soft">
             {entries.slice(3).map((entry, i) => {
-              const rank = i + 4;
               const isMe = entry.id === myId;
               return (
                 <li
@@ -176,7 +182,7 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
                   }`}
                 >
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-xs font-black text-[var(--muted)]">
-                    {rank}
+                    {i + 4}
                   </span>
 
                   <div className="min-w-0 flex-1">
@@ -184,12 +190,13 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
                       {entry.name}
                       {isMe && (
                         <span className="shrink-0 rounded bg-[var(--pink)] px-1.5 py-0.5 text-[9px] font-black text-white">
-                          YOU
+                          {t("ranking.you")}
                         </span>
                       )}
                     </p>
                     <p className="text-[10px] font-bold text-[var(--muted)]">
-                      形 {Math.round(entry.shapeScore)}% ・ 回転 {Math.round(entry.rot)} ・ 勢い{" "}
+                      {t("game.stat.shape")} {Math.round(entry.shapeScore)}% ・{" "}
+                      {t("game.stat.rot")} {Math.round(entry.rot)} ・ {t("game.stat.mom")}{" "}
                       {Math.round(entry.mom)}%
                     </p>
                   </div>
@@ -206,16 +213,14 @@ export function Leaderboard({ user, onRequireAuth, refreshKey = 0, limit = 50 }:
       </div>
 
       {!user && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-dashed line-soft bg-[var(--surface-2)] px-4 py-3">
-          <p className="text-xs font-bold text-[var(--muted)]">
-            ログインすると記録を登録できます
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-dashed border-[var(--line)] bg-[var(--surface-2)] px-4 py-3 line-soft">
+          <p className="text-xs font-bold text-[var(--muted)]">{t("ranking.needName")}</p>
           <button
             type="button"
-            onClick={onRequireAuth}
+            onClick={onRequireName}
             className="flex items-center gap-1.5 rounded-full bg-[var(--pink)] px-3 py-1.5 text-xs font-black text-white"
           >
-            <LogIn className="h-3.5 w-3.5" /> ログイン
+            <UserRound className="h-3.5 w-3.5" /> {t("ranking.setName")}
           </button>
         </div>
       )}

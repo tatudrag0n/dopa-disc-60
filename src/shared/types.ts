@@ -50,9 +50,13 @@ export interface LeaderboardResponse {
 }
 
 export interface MeResponse {
-  user: { name: string; via: "cloudflare-access" | "account" } | null;
-  /** Cloudflare Access 配下で動いているか */
-  accessEnabled: boolean;
+  /** 名前を決めていれば入る（ログインではなく、端末に紐づく名札） */
+  user: { name: string } | null;
+}
+
+export interface ConfigResponse {
+  /** Turnstile のサイトキー。null ならボット判定は無効。 */
+  turnstileSiteKey: string | null;
 }
 
 export interface SubmitResponse {
@@ -105,19 +109,11 @@ export function clamp(v: number, min: number, max: number): number {
 /** 名前の正規化ルール（クライアントのバリデーションと一致させる） */
 export const NAME_MIN = 2;
 export const NAME_MAX = 16;
-export const PASSWORD_MIN = 8;
-export const PASSWORD_MAX = 128;
 
 export function validateName(name: string): string | null {
   const n = name.trim();
   if (n.length < NAME_MIN) return `名前は${NAME_MIN}文字以上にしてください`;
   if (n.length > NAME_MAX) return `名前は${NAME_MAX}文字以内にしてください`;
   if (!/^[\p{L}\p{N}_\-. 　]+$/u.test(n)) return "名前に使えない文字が含まれています";
-  return null;
-}
-
-export function validatePassword(password: string): string | null {
-  if (password.length < PASSWORD_MIN) return `パスワードは${PASSWORD_MIN}文字以上にしてください`;
-  if (password.length > PASSWORD_MAX) return `パスワードは${PASSWORD_MAX}文字以内にしてください`;
   return null;
 }

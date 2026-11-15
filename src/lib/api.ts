@@ -1,4 +1,5 @@
 import type {
+  ConfigResponse,
   LeaderboardResponse,
   MeResponse,
   ScoreRange,
@@ -23,7 +24,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
     });
   } catch {
-    throw new ApiError("ネットワークに接続できませんでした", 0);
+    throw new ApiError("network", 0);
   }
 
   const text = await res.text();
@@ -38,48 +39,48 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const message =
-      (data as { error?: string } | null)?.error ?? `エラーが発生しました (${res.status})`;
+      (data as { error?: string } | null)?.error ?? `error:${res.status}`;
     throw new ApiError(message, res.status);
   }
   return data as T;
+}
+
+export function fetchConfig(): Promise<ConfigResponse> {
+  return request<ConfigResponse>("/api/config");
 }
 
 export function fetchMe(): Promise<MeResponse> {
   return request<MeResponse>("/api/me");
 }
 
-export function fetchLeaderboard(
-  range: ScoreRange,
-  limit = 50,
-): Promise<LeaderboardResponse> {
+export function fetchLeaderboard(range: ScoreRange, limit = 50): Promise<LeaderboardResponse> {
   return request<LeaderboardResponse>(`/api/leaderboard?range=${range}&limit=${limit}`);
 }
 
-export function submitScore(payload: {
+export interface SubmitPayload {
   shapeScore: number;
   rot: number;
   mom: number;
-}): Promise<SubmitResponse> {
+  /** 未登録のプレイヤーが最初の1回だけ送る */
+  name?: string;
+  /** Turnstile のトークン */
+  turnstileToken?: string;
+}
+
+export function submitScore(payload: SubmitPayload): Promise<SubmitResponse> {
   return request<SubmitResponse>("/api/scores", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function login(name: string, password: string): Promise<MeResponse> {
-  return request<MeResponse>("/api/auth/login", {
+export function renamePlayer(name: string): Promise<MeResponse> {
+  return request<MeResponse>("/api/me/name", {
     method: "POST",
-    body: JSON.stringify({ name, password }),
+    body: JSON.stringify({ name }),
   });
 }
 
-export function register(name: string, password: string): Promise<MeResponse> {
-  return request<MeResponse>("/api/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ name, password }),
-  });
-}
-
-export function logout(): Promise<{ ok: boolean }> {
-  return request<{ ok: boolean }>("/api/auth/logout", { method: "POST", body: "{}" });
+export function forgetPlayer(): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>("/api/logout", { method: "POST", body: "{}" });
 }
