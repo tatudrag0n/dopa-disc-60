@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX, Trophy, RotateCcw, Home, ArrowRight, RotateCw, Sparkles } from 'lucide-react';
 import { rankLabel, tr, useI18n } from './lib/i18n';
+import { analyzeDisc } from './lib/discPhysics';
 
 type Screen = 'start' | 'playing' | 'result';
 type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string };
 type Phase = 'draw' | 'aim' | 'flying' | 'landed';
-type ThrowResult = { distance: number; total: number; shapeGrade: string; balance: number; spin: number; spinSpeed: number; spinCleanliness: number; swipeSpeed: number; swipeNorm: number; isRecord?: boolean };
+type ShapeWeakest = 'symmetry' | 'roundness' | 'fill' | 'balance' | 'none'
+type ThrowResult = { distance: number; total: number; shapeGrade: string; shapeWeakest?: ShapeWeakest; balance: number; spin: number; spinSpeed: number; spinCleanliness: number; swipeSpeed: number; swipeNorm: number; isRecord?: boolean };
 type Pt = { x: number; y: number };
 
 async function callApi(action: string, args: Record<string, unknown>) {
@@ -95,6 +97,15 @@ function pseudo(i: number, seed = 1) {
 }
 const CTA = 'calm-btn flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-8 py-4 text-[18px] font-black text-white';
 function swipeLabel(norm: number) { return norm >= 0.75 ? tr('accel.fast') : norm >= 0.45 ? tr('accel.justRight') : tr('accel.slow'); }
+function shapeWeakLabel(w?: ShapeWeakest) {
+  switch (w) {
+    case 'symmetry': return tr('shapeWeak.symmetry');
+    case 'roundness': return tr('shapeWeak.roundness');
+    case 'fill': return tr('shapeWeak.fill');
+    case 'balance': return tr('shapeWeak.balance');
+    default: return tr('shapeWeak.none');
+  }
+}
 function gradeForBalance(balance: number) {
   return balance >= 82 ? 'S' : balance >= 65 ? 'A' : balance >= 48 ? 'B' : 'C';
 }
@@ -132,25 +143,23 @@ function analyzeShape(raw: Pt[]) {
   // to a common size, and resample it evenly. No circular correction.
   const normalized = centered.map((p) => ({ x: p.x / maxD, y: p.y / maxD }));
   const points = resampleClosedLoop(normalized, 48);
-  const radii = dists.map((d) => d / maxD);
-  const mean = radii.reduce((s, v) => s + v, 0) / radii.length;
-  const variance = radii.reduce((s, v) => s + (v - mean) * (v - mean), 0) / radii.length;
-  const cv = mean > 0.05 ? Math.sqrt(variance) / mean : 1;
-  const gap = Math.hypot(raw[0].x - raw[n - 1].x, raw[n - 1].y - raw[n - 1].y) / maxD;
-  let area = 0;
-  for (let i = 0; i < points.length; i++) {
-    const a = points[i]; const b = points[(i + 1) % points.length];
-    area += a.x * b.y - b.x * a.y;
-  }
-  const areaAbs = Math.abs(area) / 2;
-  const areaPenalty = areaAbs < 0.35 ? (0.35 - areaAbs) * 60 : 0;
-  const balance = Math.round(clamp(100 - cv * 170 - gap * 28 - areaPenalty, 5, 100));
+  const gap = Math.hypot(raw[0].x - raw[n - 1].x, raw[0].y - raw[n - 1].y) / maxD;
+
+  // 形状を物理量として評価する（丸さだけでは決めない）。
+  // 面積・周長・断面二次モーメントの主軸・重心の偏りから揚抗比を出し、
+  // それを飛び効率として使う。
+  const physics = analyzeDisc(points);
+
+  // 閉じていない形は空気が漏れる → 効率を落とす
+  const closureLoss = clamp(gap / 0.25, 0, 1) * 40;
+  const balance = Math.round(clamp(physics.efficiency - closureLoss, 5, 100));
   const grade = gradeForBalance(balance);
-  const xs = raw.map((p) => p.x);
-  const ys = raw.map((p) => p.y);
+
+  const xs = raw.map((q) => q.x);
+  const ys = raw.map((q) => q.y);
   const bboxW = Math.max(1, Math.max(...xs) - Math.min(...xs));
   const bboxH = Math.max(1, Math.max(...ys) - Math.min(...ys));
-  return { points, balance, grade, drawnRadius: maxD, bboxW, bboxH };
+  return { points, balance, grade, drawnRadius: maxD, bboxW, bboxH, physics };
 }
 
 export default function App() {
@@ -201,7 +210,7 @@ export default function App() {
   const runIdRef = useRef(0);
   const landedAtRef = useRef(0);
   const landedXRef = useRef(0);
-  const shapeRef = useRef<{ points: Pt[]; balance: number; grade: string; drawnRadius: number; bboxW: number; bboxH: number }>({ points: circlePoints(), balance: 100, grade: 'S', drawnRadius: 70, bboxW: 140, bboxH: 140 });
+  const shapeRef = useRef<{ points: Pt[]; balance: number; grade: string; drawnRadius: number; bboxW: number; bboxH: number; physics?: import('./lib/discPhysics').DiscPhysics }>({ points: circlePoints(), balance: 100, grade: 'S', drawnRadius: 70, bboxW: 140, bboxH: 140 });
   const strokeRef = useRef<{ active: boolean; pts: Pt[] }>({ active: false, pts: [] });
   const aimRef = useRef({ x: 0, y: 0, active: false, lastX: 0, lastY: 0, startY: 0, hist: [] as { x: number; y: number; t: number }[], vx: 0, vy: 0, discRot: 0, trail: [] as { x: number; y: number }[] });
   const spinRef = useRef({ active: false, pts: [] as { x: number; y: number; t: number }[], startTime: 0, lastMoveAt: 0, speed: 0, cleanliness: 0, spin: 0 });
@@ -295,7 +304,7 @@ export default function App() {
     for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
     if (len < 60) { strokeRef.current.pts = []; setDrawHint(tr('drawSmall')); return; }
     const analyzed = analyzeShape(pts);
-    shapeRef.current = { points: analyzed.points, balance: analyzed.balance, grade: analyzed.grade, drawnRadius: analyzed.drawnRadius, bboxW: analyzed.bboxW, bboxH: analyzed.bboxH };
+    shapeRef.current = { points: analyzed.points, balance: analyzed.balance, grade: analyzed.grade, drawnRadius: analyzed.drawnRadius, bboxW: analyzed.bboxW, bboxH: analyzed.bboxH, physics: analyzed.physics };
     setShapeBalance(analyzed.balance); setShapeGrade(analyzed.grade); setShapeSize(Math.round(analyzed.drawnRadius * 2)); setShapeLocked(true); setDrawHint('');
     sfx('bonus');
     try { navigator.vibrate?.(12); } catch {}
@@ -401,7 +410,7 @@ export default function App() {
       confettiRef.current = Array.from({ length: 42 }, (_, i) => ({ x: (pseudo(i, 21) - 0.5) * 220, y: -20 - pseudo(i, 23) * 60, vx: (pseudo(i, 29) - 0.5) * 1.6, vy: 1.2 + pseudo(i, 31) * 1.8, life: 0, max: 1.1 + pseudo(i, 37) * 0.7, color: colors[i % colors.length], size: 3 + pseudo(i, 41) * 4, rot: pseudo(i, 43) * 6, vr: (pseudo(i, 47) - 0.5) * 0.3 }));
       setTimeout(() => sfx('best'), 260);
     }
-    const rec: ThrowResult = { distance: rounded, total, shapeGrade: f.grade, balance: Math.round(f.balance), spin: f.spin, spinSpeed: f.spinSpeed, spinCleanliness: f.spinCleanliness, swipeSpeed: f.swipeSpeed, swipeNorm: f.swipeNorm, isRecord };
+    const rec: ThrowResult = { distance: rounded, total, shapeGrade: f.grade, shapeWeakest: shapeRef.current.physics?.weakest, balance: Math.round(f.balance), spin: f.spin, spinSpeed: f.spinSpeed, spinCleanliness: f.spinCleanliness, swipeSpeed: f.swipeSpeed, swipeNorm: f.swipeNorm, isRecord };
     setLastThrow(rec);
     setBest(rounded);
     setPhaseBoth('landed');
@@ -1161,7 +1170,7 @@ export default function App() {
     const spinN = clamp(result.throw.spin / 2500, 0, 1);
     const accelN = clamp(result.throw.swipeNorm, 0, 1);
     const list = [
-      { label: tr('stat.shape'), value: tr('gradeLine', { g: result.throw.shapeGrade }), pct: shapeN * 100, note: result.throw.shapeGrade === 'S' ? tr('grade.almost') : result.throw.shapeGrade === 'A' ? tr('grade.veryClean') : tr('grade.roundMore') },
+      { label: tr('stat.shape'), value: tr('gradeLine', { g: result.throw.shapeGrade }), pct: shapeN * 100, note: shapeWeakLabel(result.throw.shapeWeakest) },
       { label: tr('stat.spin'), value: `${Math.round(result.throw.spin).toLocaleString('ja-JP')}`, pct: spinN * 100, note: spinN >= 0.7 ? tr('spin.great') : spinN >= 0.4 ? tr('grade.decent') : tr('accel.fastClean') },
       { label: tr('stat.accel'), value: swipeLabel(result.throw.swipeNorm), pct: accelN * 100, note: accelN >= 0.7 ? tr('accel.sharp') : accelN >= 0.4 ? tr('accel.justRight') : tr('accel.more') },
     ];
