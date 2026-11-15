@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX, Trophy, RotateCcw, Home, ArrowRight, RotateCw, Sparkles } from 'lucide-react';
 import { rankLabel, tr, useI18n } from './lib/i18n';
 import { analyzeDisc, minimumEnclosingCircle } from './lib/discPhysics';
+import { normalizeSpin, overallGrade, shapeGrade } from './lib/grading';
 
 type Screen = 'start' | 'playing' | 'result';
 type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string };
@@ -16,13 +17,6 @@ async function callApi(action: string, args: Record<string, unknown>) {
   const json = await res.json();
   if (json?.error) throw new Error(String(json.error));
   return json.data;
-}
-function rankForTotal(total: number) {
-  if (total >= 80) return 'S';
-  if (total >= 60) return 'A';
-  if (total >= 40) return 'B';
-  if (total >= 20) return 'C';
-  return 'D';
 }
 function randomWind() {
   const dir = Math.random() < 0.5 ? -1 : 1;
@@ -107,7 +101,7 @@ function shapeWeakLabel(w?: ShapeWeakest) {
   }
 }
 function gradeForBalance(balance: number) {
-  return balance >= 82 ? 'S' : balance >= 65 ? 'A' : balance >= 48 ? 'B' : 'C';
+  return shapeGrade(balance);
 }
 function circlePoints(): Pt[] {
   return Array.from({ length: 20 }, (_, i) => {
@@ -386,12 +380,17 @@ export default function App() {
     const prevTotal = highScores.length ? (highScores[0].total ?? highScores[0].best) : 0;
     const newBest = finalTotal > prevTotal && finalTotal > 0;
     setIsNewBest(newBest);
-    setResult({ best: finalBest, total: finalTotal, rank: rankForTotal(finalTotal), throw: t });
+    const overall = overallGrade(
+    clamp(t.balance / 100, 0, 1),
+    normalizeSpin(t.spin),
+    clamp(t.swipeNorm, 0, 1),
+  );
+  setResult({ best: finalBest, total: finalTotal, rank: overall, throw: t });
     setScreen('result');
     try {
       if (finalTotal > 0) {
         const key = `distance-${runIdRef.current}-${finalTotal}`;
-        await callApi('records.create', { collection: 'flying_disc_distance_scores', value: { best: finalBest, total: finalTotal, rank: rankForTotal(finalTotal), playedAt: new Date().toISOString() }, idempotency_key: key });
+        await callApi('records.create', { collection: 'flying_disc_distance_scores', value: { best: finalBest, total: finalTotal, rank: overall, playedAt: new Date().toISOString() }, idempotency_key: key });
         await loadScores();
       }
     } catch { setApiNote(tr('savePending')); }
@@ -1167,7 +1166,7 @@ export default function App() {
   void best; void wind; void aimX; void aimY; void swipeSpeedShown; void spinSpeedShown; void spinCleanlinessShown; void shapeBalance; void shapeGrade; void shapeSize;
   const resultFactors = result.throw ? (() => {
     const shapeN = clamp(result.throw.balance / 100, 0, 1);
-    const spinN = clamp(result.throw.spin / 2500, 0, 1);
+    const spinN = normalizeSpin(result.throw.spin);
     const accelN = clamp(result.throw.swipeNorm, 0, 1);
     const list = [
       { label: tr('stat.shape'), value: tr('gradeLine', { g: result.throw.shapeGrade }), pct: shapeN * 100, note: shapeWeakLabel(result.throw.shapeWeakest) },
@@ -1218,14 +1217,14 @@ export default function App() {
             <div className="mt-4 rounded-[24px] border border-[var(--line)] bg-[var(--surface)] p-5 text-center shadow-[0_10px_28px_rgba(22,48,42,.07)]">
               <p className="flex items-center justify-center gap-1.5 text-xs font-bold tracking-widest text-[var(--muted)]"><Trophy size={14} className="text-[var(--accent)]" /> {tr('best')}</p>
               <p className="mt-2 bg-gradient-to-r from-[#ff6a00] via-[#ff2e88] to-[#a100ff] bg-clip-text text-[44px] font-black leading-none text-transparent">{bestTotalDisplay > 0 ? fmtScore(bestTotalDisplay) : '—'}</p>
-              {bestTotalDisplay > 0 && <p className="mt-2 text-xs font-bold text-[var(--muted)]">ランク {rankForTotal(bestTotalDisplay)} ・ {fmt(bestDistDisplay)}</p>}
+              {bestTotalDisplay > 0 && <p className="mt-2 text-xs font-bold text-[var(--muted)]">{highScores[0]?.rank ? `${tr('rankShort')} ${highScores[0].rank} ・ ` : ''}{fmt(bestDistDisplay)}</p>}
             </div>
             <button onClick={startGame} className={`${CTA} mt-6 w-full py-5 text-[22px]`}>{tr('start')}</button>
             <button onClick={() => setShowHow(v => !v)} className="ghost-btn mt-4 rounded-full bg-[var(--surface)] py-3 text-sm font-bold">{showHow ? tr('howtoClose') : tr('howto')}</button>
             {showHow && <div className="pop-in mt-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 text-[13px] leading-7">{tr('howto.step1')}<br />{tr('howto.step2')}<br />{tr('howto.resultNote')}</div>}
             <section className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 shadow-sm">
               <h2 className="flex items-center gap-2 text-sm font-black"><Trophy size={17} className="text-[var(--accent)]" /> {tr('top5')}</h2>
-              {highScores.length === 0 ? <p className="mt-3 text-sm text-[var(--muted)]">{tr('noRecords')}</p> : <ol className="mt-3 max-h-[42dvh] space-y-2 overflow-y-auto overscroll-contain pr-1">{highScores.map((r, i) => <li key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${isMe(r.name) ? "bg-[var(--accent-soft)] ring-2 ring-[var(--accent)]" : "bg-[var(--surface-2)]"}`}><span className="font-black">{rankLabel(i + 1)} <span className="ml-1 text-xs text-[var(--muted)]">{r.name}</span> <span className="ml-1 text-[var(--accent)]">{r.rank}</span></span><span className="font-black">{fmtScore(r.total ?? r.best)}</span><span className="text-xs text-[var(--muted)]">{fmt(r.best)}</span></li>)}</ol>}
+              {highScores.length === 0 ? <p className="mt-3 text-sm text-[var(--muted)]">{tr('noRecords')}</p> : <ol className="mt-3 max-h-[42dvh] space-y-2 overflow-y-auto overscroll-contain pr-1">{highScores.map((r, i) => <li key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${isMe(r.name) ? "bg-[var(--accent-soft)] ring-2 ring-[var(--accent)]" : "bg-[var(--surface-2)]"}`}><span className="font-black">{rankLabel(i + 1)} <span className="ml-1 text-xs text-[var(--muted)]">{r.name}</span> {r.rank && <span className="ml-1 text-[var(--accent)]">{r.rank}</span>}</span><span className="font-black">{fmtScore(r.total ?? r.best)}</span><span className="text-xs text-[var(--muted)]">{fmt(r.best)}</span></li>)}</ol>}
               {apiNote && <p className="mt-2 text-xs text-amber-700">{apiNote}</p>}
             </section>
           </main>

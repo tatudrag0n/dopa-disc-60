@@ -17,6 +17,8 @@
  * として分離して評価する。円はその一例（全次数ゼロ）にすぎない。
  */
 
+import { shapeGrade, type Grade } from './grading';
+
 export interface Pt {
   x: number;
   y: number;
@@ -58,7 +60,7 @@ export interface DiscPhysics {
   /** 飛び効率 0..100 */
   efficiency: number;
   weakest: WeakPoint;
-  grade: "S" | "A" | "B" | "C";
+  grade: Grade;
   /** デバッグ・表示用: 半径分布のハーモニクス振幅（平均半径で正規化） */
   harmonics: number[];
 }
@@ -256,8 +258,7 @@ export function analyzeDisc(pts: Pt[]): DiscPhysics {
   factors.sort((a, b) => a[1] - b[1]);
   const weakest: WeakPoint = factors[0][1] >= 0.8 ? "none" : factors[0][0];
 
-  const grade: DiscPhysics["grade"] =
-    efficiency >= 82 ? "S" : efficiency >= 65 ? "A" : efficiency >= 45 ? "B" : "C";
+  const grade = shapeGrade(efficiency);
 
   return {
     area,
