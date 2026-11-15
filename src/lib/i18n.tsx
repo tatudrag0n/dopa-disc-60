@@ -144,6 +144,8 @@ const ja = {
   "error.generic": "エラーが発生しました",
   "error.network": "ネットワークに接続できませんでした",
   "error.botFailed": "ボット判定に失敗しました。ページを再読み込みしてお試しください",
+  "error.rateLimit": "投稿が多すぎます。少し待ってから再挑戦してください",
+  "error.nameRequired": "名前を入力してください",
 
   "lang.label": "English",
 } as const;
@@ -289,6 +291,8 @@ const en: Record<MessageKey, string> = {
   "error.generic": "Something went wrong",
   "error.network": "Could not reach the network",
   "error.botFailed": "The human check failed. Please reload and try again.",
+  "error.rateLimit": "Too many submissions. Please wait a moment.",
+  "error.nameRequired": "Please enter a name.",
 
   "lang.label": "日本語",
 };

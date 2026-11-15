@@ -46,7 +46,7 @@ export function ResultOverlay({
   const [nameError, setNameError] = useState<string | null>(null);
   const submittedRef = useRef(false);
 
-  const turnstile = useTurnstile(siteKey, lang);
+  const { containerRef: turnstileRef, execute: executeTurnstile } = useTurnstile(siteKey, lang);
 
   // 数字のカウントアップ
   useEffect(() => {
@@ -68,7 +68,7 @@ export function ResultOverlay({
       setState({ kind: "checking" });
       let token = "";
       try {
-        token = await turnstile.execute();
+        token = await executeTurnstile();
       } catch {
         setState({ kind: "error", message: t("error.botFailed") });
         return;
@@ -86,14 +86,23 @@ export function ResultOverlay({
         if (playerName) onPlayerCreated(playerName);
         onSubmitted();
       } catch (err) {
-        setState({
-          kind: "error",
-          message: err instanceof ApiError ? err.message : t("error.network"),
-        });
+        setState({ kind: "error", message: describeError(err) });
       }
     },
-    [onPlayerCreated, onSubmitted, result, t, turnstile],
+    [executeTurnstile, onPlayerCreated, onSubmitted, result, t, lang],
   );
+
+  /** サーバーのメッセージは日本語なので、状態コードで英語に寄せる */
+  function describeError(err: unknown): string {
+    if (!(err instanceof ApiError)) return t("error.generic");
+    if (err.status === 0) return t("error.network");
+    if (err.status === 403) return t("error.botFailed");
+    if (err.status === 429) return t("error.rateLimit");
+    if (err.status === 401 || err.status === 400) {
+      return lang === "ja" ? err.message : t("error.nameRequired");
+    }
+    return lang === "ja" ? err.message : t("error.generic");
+  }
 
   // 名前を決めているプレイヤーは自動で投稿する
   useEffect(() => {
@@ -258,16 +267,15 @@ export function ResultOverlay({
           {state.kind === "error" && (
             <div className="rounded-xl bg-[var(--danger)] px-3 py-2 text-center">
               <p className="text-xs font-black text-white">{state.message}</p>
-              <button
-                type="button"
-                onClick={() => {
-                  submittedRef.current = true;
-                  void doSubmit(user ? undefined : undefined);
-                }}
-                className="mt-1.5 rounded-full bg-white/25 px-3 py-1 text-[11px] font-black text-white"
-              >
-                {t("common.retry")}
-              </button>
+              {user && (
+                <button
+                  type="button"
+                  onClick={() => void doSubmit()}
+                  className="mt-1.5 rounded-full bg-white/25 px-3 py-1 text-[11px] font-black text-white"
+                >
+                  {t("common.retry")}
+                </button>
+              )}
             </div>
           )}
 
@@ -297,7 +305,7 @@ export function ResultOverlay({
         </div>
 
         {/* Turnstile のウィジェット（通常は不可視） */}
-        <div ref={turnstile.containerRef} className="mt-2 flex justify-center" />
+        <div ref={turnstileRef} className="mt-2 flex justify-center" />
       </div>
     </div>
   );
