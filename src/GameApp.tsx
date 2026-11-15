@@ -1167,9 +1167,9 @@ export default function App() {
 
   return (
     <div data-safe-area-inset-root style={{ boxSizing: 'border-box', paddingTop: 'var(--safe-area-inset-top)', minHeight: '100vh', background: 'var(--bg)' }} className="overflow-x-clip">
-      <div className="mx-auto flex min-h-[calc(100vh-var(--safe-area-inset-top))] w-full max-w-[480px] flex-col bg-[var(--bg)]">
+      <div className="flex min-h-[calc(100vh-var(--safe-area-inset-top))] w-full max-w-none flex-col bg-[var(--bg)]">
         {screen === 'start' && (
-          <main className="flex flex-1 flex-col px-6 pb-8 pt-6">
+          <main className="mx-auto flex w-full max-w-[600px] flex-1 flex-col px-6 pb-8 pt-6">
             <div className="flex items-center justify-between">
               <span className="text-[15px] font-black tracking-tight">フライングディスク</span>
               <button onClick={toggleMute} aria-label={muted ? '音を出す' : 'ミュートする'} className="ghost-btn rounded-full border border-[var(--line)] bg-[var(--surface)] p-2.5">{muted ? <VolumeX size={19} /> : <Volume2 size={19} />}</button>
@@ -1208,7 +1208,7 @@ export default function App() {
 
         {screen === 'playing' && (
           <main className="flex h-[calc(100dvh-var(--safe-area-inset-top))] flex-1 flex-col overflow-hidden">
-            <header data-safe-area-sticky-top style={{ top: 'var(--safe-area-inset-top)' }} className="sticky z-20 shrink-0 bg-[var(--bg)] px-4 pb-3 pt-3">
+            <header data-safe-area-sticky-top style={{ top: 'var(--safe-area-inset-top)' }} className="sticky z-20 mx-auto w-full max-w-[640px] shrink-0 bg-[var(--bg)] px-4 pb-3 pt-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[15px] font-black tracking-tight">フライングディスク</span>
                 <button onClick={toggleMute} aria-label={muted ? '音を出す' : 'ミュートする'} className="ghost-btn rounded-full border border-[var(--line)] bg-[var(--surface)] p-2">{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
@@ -1282,7 +1282,7 @@ export default function App() {
         )}
 
         {screen === 'result' && result.throw && (
-          <main className="flex flex-1 flex-col px-5 pb-8 pt-6">
+          <main className="mx-auto flex w-full max-w-[600px] flex-1 flex-col px-5 pb-8 pt-6">
             <header className="flex items-center justify-between">
               <span className="text-[15px] font-black tracking-tight">フライングディスク</span>
               <nav aria-label="進み具合" className="flex items-center gap-1.5">
