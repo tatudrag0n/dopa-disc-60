@@ -11,11 +11,19 @@ interface Props {
   /** この値が変わると再取得する（スコア更新時） */
   refreshKey?: number;
   limit?: number;
+  /** 親側に名前の導線がある場合は下部の CTA を出さない */
+  showNameCta?: boolean;
 }
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-export function Leaderboard({ user, onRequireName, refreshKey = 0, limit = 50 }: Props) {
+export function Leaderboard({
+  user,
+  onRequireName,
+  refreshKey = 0,
+  limit = 50,
+  showNameCta = true,
+}: Props) {
   const { t } = useI18n();
   const [range, setRange] = useState<ScoreRange>("all");
   const [data, setData] = useState<LeaderboardResponse | null>(null);
@@ -212,7 +220,7 @@ export function Leaderboard({ user, onRequireName, refreshKey = 0, limit = 50 }:
         )}
       </div>
 
-      {!user && (
+      {!user && showNameCta && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-dashed border-[var(--line)] bg-[var(--surface-2)] px-4 py-3 line-soft">
           <p className="text-xs font-bold text-[var(--muted)]">{t("ranking.needName")}</p>
           <button

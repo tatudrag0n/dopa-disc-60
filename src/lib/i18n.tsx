@@ -68,7 +68,7 @@ const ja = {
     "円盤のまわりをぐるぐる回すと「回転」と「勢い」が上がります。勢いは時間とともに減るので、回し終わったらすぐ飛ばしましょう。",
   "howto.3.title": "飛ばす",
   "howto.3.desc":
-    "上方向へスワイプするか、「飛ばす」ボタンを押します。PC では Space / Enter でも飛びます。R でやり直し、Esc でゲームを終了。",
+    "円盤を回したまま指を上まで運ぶと飛びます。PC ではマウスで回して上へ運ぶか、Space / Enter でも飛びます。R でやり直し。",
   "howto.4.title": "ランキングに登録",
   "howto.4.desc":
     "スコアは自動でランキングに登録されます。飛距離はサーバー側で再計算されるため、改造しても記録は伸びません。",
@@ -79,7 +79,8 @@ const ja = {
   "game.step2": "STEP 2 / 2",
   "game.flying": "FLYING",
   "game.best": "BEST {v}m",
-  "game.drawHint": "円盤の形を1筆で描いてね",
+  "game.drawHint": "形を1筆で描いて",
+  "game.spinHint": "回して、そのまま上までスワイプ",
   "game.spinHintHigh": "いい勢い！そのまま上へスワイプ",
   "game.spinHintMid": "ぐるっと回して上へスワイプ！（ボタンでもOK）",
   "game.spinHintLow": "円盤のまわりをぐるぐる回して勢いをつけよう",
@@ -146,6 +147,10 @@ const ja = {
   "error.botFailed": "ボット判定に失敗しました。ページを再読み込みしてお試しください",
   "error.rateLimit": "投稿が多すぎます。少し待ってから再挑戦してください",
   "error.nameRequired": "名前を入力してください",
+
+  "sheet.ranking": "ランキング",
+  "sheet.howto": "つかいかた",
+  "sheet.close": "閉じる",
 
   "lang.label": "English",
 } as const;
@@ -215,7 +220,7 @@ const en: Record<MessageKey, string> = {
     "Circle around the disc to raise spin and power. Power drains over time, so launch soon after your last spin.",
   "howto.3.title": "Launch",
   "howto.3.desc":
-    "Swipe upward or press the launch button. On desktop, Space / Enter also launches. R restarts and Esc quits the game.",
+    "Keep spinning and move your finger to the top to launch. On desktop, drag with the mouse or press Space / Enter. R restarts.",
   "howto.4.title": "Get ranked",
   "howto.4.desc":
     "Scores are posted automatically. Distance is recalculated on the server, so editing the request won't get you further.",
@@ -226,7 +231,8 @@ const en: Record<MessageKey, string> = {
   "game.step2": "STEP 2 / 2",
   "game.flying": "FLYING",
   "game.best": "BEST {v}m",
-  "game.drawHint": "Draw the disc in one stroke",
+  "game.drawHint": "Draw the shape in one stroke",
+  "game.spinHint": "Spin, then swipe up to the top",
   "game.spinHintHigh": "Great power! Swipe up now",
   "game.spinHintMid": "Spin around, then swipe up (or use the button)",
   "game.spinHintLow": "Circle around the disc to build power",
@@ -293,6 +299,10 @@ const en: Record<MessageKey, string> = {
   "error.botFailed": "The human check failed. Please reload and try again.",
   "error.rateLimit": "Too many submissions. Please wait a moment.",
   "error.nameRequired": "Please enter a name.",
+
+  "sheet.ranking": "Ranking",
+  "sheet.howto": "How to play",
+  "sheet.close": "Close",
 
   "lang.label": "日本語",
 };

@@ -267,3 +267,140 @@ body.dopa-locked {
     scroll-behavior: auto !important;
   }
 }
+
+/* --------------------------------------------------------------- *
+ * ゲーム画面
+ * 原作 dopa_disc_60/index.html の見た目をそのまま再現する。
+ * 色・余白・角丸は原作の CSS に合わせているので、変えるときは注意。
+ * --------------------------------------------------------------- */
+.game-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0a7cff;
+  color: #fff;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px 6px;
+  padding-top: max(10px, env(safe-area-inset-top));
+}
+
+.game-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.game-step {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.game-best {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #111;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.game-stage {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+
+.game-sky {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #1a8cff 0%, #4fc3ff 55%, #a8e6ff 82%, #d9f7d9 100%);
+}
+
+.game-ground {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: -6%;
+  height: 52%;
+  background: linear-gradient(180deg, #2ee66b 0%, #1ccf5a 55%, #12b84a 100%);
+  border-top: 6px solid #a8e6ff;
+  border-radius: 50% 50% 0 0 / 28px 28px 0 0;
+}
+
+.game-horizon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 48%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.game-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.game-info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 14px 14px;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.18));
+  text-align: center;
+  pointer-events: none;
+}
+
+.game-msg {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.38);
+  font-size: 14px;
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+}
+
+.game-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.game-pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.game-pill b {
+  color: #ff2e8a;
+}

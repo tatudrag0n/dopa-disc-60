@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Home, Loader2, RotateCcw, Share2, ShieldCheck, Trophy, UserRound } from "lucide-react";
+import { Check, Loader2, RotateCcw, Share2, ShieldCheck, Trophy, UserRound } from "lucide-react";
 import { ApiError, submitScore } from "../lib/api";
 import type { PlayResult } from "../game/engine";
 import { distanceCommentKey, improvementHintKey, shapeCommentKey } from "../lib/texts";
@@ -16,7 +16,7 @@ interface Props {
   siteKey: string | null;
   personalBest: number;
   onRetry: () => void;
-  onHome: () => void;
+  onOpenRanking: () => void;
   onPlayerCreated: (name: string) => void;
   onSubmitted: () => void;
 }
@@ -34,7 +34,7 @@ export function ResultOverlay({
   siteKey,
   personalBest,
   onRetry,
-  onHome,
+  onOpenRanking,
   onPlayerCreated,
   onSubmitted,
 }: Props) {
@@ -297,10 +297,10 @@ export function ResultOverlay({
           </button>
           <button
             type="button"
-            onClick={onHome}
+            onClick={onOpenRanking}
             className="btn-3d flex items-center justify-center gap-2 rounded-xl bg-[var(--surface-2)] py-3.5 text-sm font-black"
           >
-            <Home className="h-4 w-4" /> {t("result.home")}
+            <Trophy className="h-4 w-4" /> {t("sheet.ranking")}
           </button>
         </div>
 
