@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX, Trophy, RotateCcw, Home, ArrowRight, RotateCw, Sparkles } from 'lucide-react';
+import { rankLabel, tr, useI18n } from './lib/i18n';
 
 type Screen = 'start' | 'playing' | 'result';
 type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string };
@@ -9,7 +10,7 @@ type Pt = { x: number; y: number };
 
 async function callApi(action: string, args: Record<string, unknown>) {
   const res = await fetch('actions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, args }) });
-  if (!res.ok) throw new Error(`通信をもう一度試してね (${res.status})`);
+  if (!res.ok) throw new Error(`${tr('netRetry')} (${res.status})`);
   const json = await res.json();
   if (json?.error) throw new Error(String(json.error));
   return json.data;
@@ -27,7 +28,7 @@ function randomWind() {
   return dir * speed;
 }
 function fmt(m: number) { return `${m.toFixed(1)}m`; }
-function fmtScore(m: number) { return `${m.toFixed(1)}点`; }
+function fmtScore(m: number) { return `${m.toFixed(1)}${tr('point')}`; }
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const wrapAngle = (a: number) => {
   let v = a;
@@ -93,7 +94,7 @@ function pseudo(i: number, seed = 1) {
   return x - Math.floor(x);
 }
 const CTA = 'calm-btn flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-8 py-4 text-[18px] font-black text-white';
-function swipeLabel(norm: number) { return norm >= 0.75 ? 'はやい' : norm >= 0.45 ? 'ちょうどいい' : 'ゆっくり'; }
+function swipeLabel(norm: number) { return norm >= 0.75 ? tr('accel.fast') : norm >= 0.45 ? tr('accel.justRight') : tr('accel.slow'); }
 function gradeForBalance(balance: number) {
   return balance >= 82 ? 'S' : balance >= 65 ? 'A' : balance >= 48 ? 'B' : 'C';
 }
@@ -153,6 +154,7 @@ function analyzeShape(raw: Pt[]) {
 }
 
 export default function App() {
+  useI18n(); // 言語の切り替えで再描画させるために購読する
   const [screen, setScreen] = useState<Screen>('start');
   const [muted, setMuted] = useState(false);
   const [highScores, setHighScores] = useState<ScoreRow[]>([]);
@@ -240,7 +242,7 @@ export default function App() {
       const rows = (data?.records || []).map((r: any) => r.value as ScoreRow).filter((v: any) => typeof v?.best === 'number').sort((a: ScoreRow, b: ScoreRow) => (b.total ?? b.best) - (a.total ?? a.best)).slice(0, 5);
       setHighScores(rows); setApiNote('');
       if (rows.length) globalBestRef.current = rows[0].total ?? rows[0].best;
-    } catch { setApiNote('ベスト記録を読み込み中だよ。通信がつながったら再表示するよ。'); }
+    } catch { setApiNote(tr('loadingBest')); }
   }, []);
   useEffect(() => { loadScores(); }, [loadScores]);
 
@@ -286,10 +288,10 @@ export default function App() {
   const finalizeShape = useCallback(() => {
     const pts = strokeRef.current.pts;
     strokeRef.current.active = false;
-    if (pts.length < 8) { strokeRef.current.pts = []; setDrawHint('もう少し大きく、1周描いてみよう'); return; }
+    if (pts.length < 8) { strokeRef.current.pts = []; setDrawHint(tr('drawSmall')); return; }
     let len = 0;
     for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-    if (len < 60) { strokeRef.current.pts = []; setDrawHint('もう少し大きく、1周描いてみよう'); return; }
+    if (len < 60) { strokeRef.current.pts = []; setDrawHint(tr('drawSmall')); return; }
     const analyzed = analyzeShape(pts);
     shapeRef.current = { points: analyzed.points, balance: analyzed.balance, grade: analyzed.grade, drawnRadius: analyzed.drawnRadius, bboxW: analyzed.bboxW, bboxH: analyzed.bboxH };
     setShapeBalance(analyzed.balance); setShapeGrade(analyzed.grade); setShapeSize(Math.round(analyzed.drawnRadius * 2)); setShapeLocked(true); setDrawHint('');
@@ -381,7 +383,7 @@ export default function App() {
         await callApi('records.create', { collection: 'flying_disc_distance_scores', value: { best: finalBest, total: finalTotal, rank: rankForTotal(finalTotal), playedAt: new Date().toISOString() }, idempotency_key: key });
         await loadScores();
       }
-    } catch { setApiNote('今回のベスト記録は保存待ちだよ。もう一度試してみよう。'); }
+    } catch { setApiNote(tr('savePending')); }
     if (newBest) sfx('best');
   }, [highScores, loadScores, sfx, lastThrow]);
 
@@ -1135,9 +1137,9 @@ export default function App() {
         s.active = false;
         s.lastMoveAt = performance.now();
         if (s.pts.length < 10 || Math.abs(s.spin) <= 0) {
-          setSpinHint('もう少し速く・綺麗に回してみよう');
+          setSpinHint(tr('spin.more'));
         } else {
-          setSpinHint('勢いが抜ける前に、そのまま上まで持っていこう');
+          setSpinHint(tr('aimDecay'));
         }
       }
       aimRef.current.active = false;
@@ -1148,7 +1150,7 @@ export default function App() {
   const bestTotalDisplay = highScores.length ? (highScores[0].total ?? highScores[0].best) : 0;
   const bestDistDisplay = highScores.length ? highScores[0].best : 0;
   const stepIndex = screen === 'result' ? 2 : phase === 'draw' ? 0 : phase === 'landed' ? 2 : 1;
-  const steps = ['1 描く', '2 投げる', '3 結果'];
+  const steps = [tr('step1'), tr('step2'), tr('step3')];
   const spinPct = Math.min(100, (spinShown / 2500) * 100);
   const spinHot = spinShown > 1200;
   void best; void wind; void aimX; void aimY; void swipeSpeedShown; void spinSpeedShown; void spinCleanlinessShown; void shapeBalance; void shapeGrade; void shapeSize;
@@ -1157,9 +1159,9 @@ export default function App() {
     const spinN = clamp(result.throw.spin / 2500, 0, 1);
     const accelN = clamp(result.throw.swipeNorm, 0, 1);
     const list = [
-      { label: '形状', value: `グレード ${result.throw.shapeGrade}`, pct: shapeN * 100, note: result.throw.shapeGrade === 'S' ? 'ほぼ真円' : result.throw.shapeGrade === 'A' ? 'とても綺麗' : 'もう少し丸く' },
-      { label: '回転', value: `${Math.round(result.throw.spin).toLocaleString('ja-JP')}`, pct: spinN * 100, note: spinN >= 0.7 ? 'よく回った' : spinN >= 0.4 ? 'まずまず' : '速く・綺麗に' },
-      { label: '加速度', value: swipeLabel(result.throw.swipeNorm), pct: accelN * 100, note: accelN >= 0.7 ? 'キレのある投げ' : accelN >= 0.4 ? 'ちょうどいい' : 'もっと勢いよく' },
+      { label: tr('stat.shape'), value: tr('gradeLine', { g: result.throw.shapeGrade }), pct: shapeN * 100, note: result.throw.shapeGrade === 'S' ? tr('grade.almost') : result.throw.shapeGrade === 'A' ? tr('grade.veryClean') : tr('grade.roundMore') },
+      { label: tr('stat.spin'), value: `${Math.round(result.throw.spin).toLocaleString('ja-JP')}`, pct: spinN * 100, note: spinN >= 0.7 ? tr('spin.great') : spinN >= 0.4 ? tr('grade.decent') : tr('accel.fastClean') },
+      { label: tr('stat.accel'), value: swipeLabel(result.throw.swipeNorm), pct: accelN * 100, note: accelN >= 0.7 ? tr('accel.sharp') : accelN >= 0.4 ? tr('accel.justRight') : tr('accel.more') },
     ];
     const bestIdx = [shapeN, spinN, accelN].indexOf(Math.max(shapeN, spinN, accelN));
     return { list, bestIdx };
@@ -1171,12 +1173,12 @@ export default function App() {
         {screen === 'start' && (
           <main className="mx-auto flex w-full max-w-[600px] flex-1 flex-col px-6 pb-8 pt-6">
             <div className="flex items-center justify-between">
-              <span className="text-[15px] font-black tracking-tight">フライングディスク</span>
-              <button onClick={toggleMute} aria-label={muted ? '音を出す' : 'ミュートする'} className="ghost-btn rounded-full border border-[var(--line)] bg-[var(--surface)] p-2.5">{muted ? <VolumeX size={19} /> : <Volume2 size={19} />}</button>
+              <span className="text-[15px] font-black tracking-tight">{tr('app.title')}</span>
+              <button onClick={toggleMute} aria-label={muted ? tr('unmute') : tr('mute')} className="ghost-btn rounded-full border border-[var(--line)] bg-[var(--surface)] p-2.5">{muted ? <VolumeX size={19} /> : <Volume2 size={19} />}</button>
             </div>
             <div className="mt-10 text-center">
-              <h1 className="text-[clamp(40px,12vw,56px)] font-black leading-[1.08] tracking-tight">フライング<br /><span className="text-[var(--accent)]">ディスク</span></h1>
-              <p className="mx-auto mt-4 max-w-[300px] text-[15px] font-bold leading-relaxed text-[var(--muted)]">描いた形が、そのままディスクになる。</p>
+              <h1 className="text-[clamp(40px,12vw,56px)] font-black leading-[1.08] tracking-tight">{tr('app.titleLine1')}<br /><span className="text-[var(--accent)]">{tr('app.titleLine2')}</span></h1>
+              <p className="mx-auto mt-4 max-w-[300px] text-[15px] font-bold leading-relaxed text-[var(--muted)]">{tr('app.tagline')}</p>
             </div>
             <div aria-hidden="true" className="floaty mx-auto mt-10">
               <div className="relative flex h-[34px] w-[138px] items-center justify-center rounded-[50%] bg-gradient-to-b from-[#fff066] via-[#ff2e88] to-[#a100ff] shadow-[0_10px_18px_rgba(255,46,136,.38)] ring-1 ring-black/10">
@@ -1185,22 +1187,22 @@ export default function App() {
               <div className="mx-auto mt-2 h-[6px] w-[96px] rounded-full bg-black/10 blur-[2px]" />
             </div>
             <div className="mt-8 flex items-center justify-center gap-2 text-[12px] font-black text-[var(--muted)]">
-              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[var(--accent)]">形状</span><span aria-hidden="true">×</span>
-              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[var(--accent)]">回転</span><span aria-hidden="true">×</span>
-              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[var(--accent)]">加速度</span><span aria-hidden="true">=</span>
-              <span className="text-[var(--ink)]">飛距離</span>
+              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[var(--accent)]">{tr('stat.shape')}</span><span aria-hidden="true">×</span>
+              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[var(--accent)]">{tr('stat.spin')}</span><span aria-hidden="true">×</span>
+              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[var(--accent)]">{tr('stat.accel')}</span><span aria-hidden="true">=</span>
+              <span className="text-[var(--ink)]">{tr('stat.distance')}</span>
             </div>
             <div className="mt-4 rounded-[24px] border border-[var(--line)] bg-[var(--surface)] p-5 text-center shadow-[0_10px_28px_rgba(22,48,42,.07)]">
-              <p className="flex items-center justify-center gap-1.5 text-xs font-bold tracking-widest text-[var(--muted)]"><Trophy size={14} className="text-[var(--accent)]" /> 自己ベスト</p>
+              <p className="flex items-center justify-center gap-1.5 text-xs font-bold tracking-widest text-[var(--muted)]"><Trophy size={14} className="text-[var(--accent)]" /> {tr('best')}</p>
               <p className="mt-2 bg-gradient-to-r from-[#ff6a00] via-[#ff2e88] to-[#a100ff] bg-clip-text text-[44px] font-black leading-none text-transparent">{bestTotalDisplay > 0 ? fmtScore(bestTotalDisplay) : '—'}</p>
               {bestTotalDisplay > 0 && <p className="mt-2 text-xs font-bold text-[var(--muted)]">ランク {rankForTotal(bestTotalDisplay)} ・ {fmt(bestDistDisplay)}</p>}
             </div>
-            <button onClick={startGame} className={`${CTA} mt-6 w-full py-5 text-[22px]`}>スタート</button>
-            <button onClick={() => setShowHow(v => !v)} className="ghost-btn mt-4 rounded-full bg-[var(--surface)] py-3 text-sm font-bold">{showHow ? '遊び方をとじる' : '遊び方を見る'}</button>
-            {showHow && <div className="pop-in mt-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 text-[13px] leading-7">STEP 1：1筆で1つの形を描きます。描いた形がそのままディスクになります。<br />STEP 2：下で回して、その勢いのまま上までスワイプで発射します。回転は「今の速さ × 綺麗さ」だけで決まります。止まると勢いが抜けていきます。<br />飛距離 = 形状 × 回転 × 加速度。スコア = 飛距離のみです。</div>}
+            <button onClick={startGame} className={`${CTA} mt-6 w-full py-5 text-[22px]`}>{tr('start')}</button>
+            <button onClick={() => setShowHow(v => !v)} className="ghost-btn mt-4 rounded-full bg-[var(--surface)] py-3 text-sm font-bold">{showHow ? tr('howtoClose') : tr('howto')}</button>
+            {showHow && <div className="pop-in mt-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 text-[13px] leading-7">{tr('howto.step1')}<br />{tr('howto.step2')}<br />{tr('howto.resultNote')}</div>}
             <section className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 shadow-sm">
-              <h2 className="flex items-center gap-2 text-sm font-black"><Trophy size={17} className="text-[var(--accent)]" /> スコア TOP 5</h2>
-              {highScores.length === 0 ? <p className="mt-3 text-sm text-[var(--muted)]">最初の一投で記録を作ろう。</p> : <ol className="mt-3 space-y-2">{highScores.map((r, i) => <li key={i} className="flex items-center justify-between rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm"><span className="font-black">{i + 1}位 <span className="ml-1 text-xs text-[var(--muted)]">{r.name}</span> <span className="ml-1 text-[var(--accent)]">{r.rank}</span></span><span className="font-black">{fmtScore(r.total ?? r.best)}</span><span className="text-xs text-[var(--muted)]">{fmt(r.best)}</span></li>)}</ol>}
+              <h2 className="flex items-center gap-2 text-sm font-black"><Trophy size={17} className="text-[var(--accent)]" /> {tr('top5')}</h2>
+              {highScores.length === 0 ? <p className="mt-3 text-sm text-[var(--muted)]">{tr('noRecords')}</p> : <ol className="mt-3 space-y-2">{highScores.map((r, i) => <li key={i} className="flex items-center justify-between rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm"><span className="font-black">{rankLabel(i + 1)} <span className="ml-1 text-xs text-[var(--muted)]">{r.name}</span> <span className="ml-1 text-[var(--accent)]">{r.rank}</span></span><span className="font-black">{fmtScore(r.total ?? r.best)}</span><span className="text-xs text-[var(--muted)]">{fmt(r.best)}</span></li>)}</ol>}
               {apiNote && <p className="mt-2 text-xs text-amber-700">{apiNote}</p>}
             </section>
           </main>
@@ -1210,10 +1212,10 @@ export default function App() {
           <main className="flex h-[calc(100dvh-var(--safe-area-inset-top))] flex-1 flex-col overflow-hidden">
             <header data-safe-area-sticky-top style={{ top: 'var(--safe-area-inset-top)' }} className="sticky z-20 mx-auto w-full max-w-[640px] shrink-0 bg-[var(--bg)] px-4 pb-3 pt-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[15px] font-black tracking-tight">フライングディスク</span>
-                <button onClick={toggleMute} aria-label={muted ? '音を出す' : 'ミュートする'} className="ghost-btn rounded-full border border-[var(--line)] bg-[var(--surface)] p-2">{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
+                <span className="text-[15px] font-black tracking-tight">{tr('app.title')}</span>
+                <button onClick={toggleMute} aria-label={muted ? tr('unmute') : tr('mute')} className="ghost-btn rounded-full border border-[var(--line)] bg-[var(--surface)] p-2">{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
               </div>
-              <nav aria-label="進み具合" className="mt-3 flex items-center gap-1.5">
+              <nav aria-label={tr("progress")} className="mt-3 flex items-center gap-1.5">
                 {steps.map((label, i) => {
                   const done = i < stepIndex;
                   const active = i === stepIndex;
@@ -1237,29 +1239,29 @@ export default function App() {
                 </div>
               )}
               {phase === 'draw' && !shapeLocked && (
-                <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"><span className="rounded-full bg-white/85 px-3 py-1 text-[12px] font-black text-[var(--ink)] shadow-sm backdrop-blur">1筆で ひと回り</span></div>
+                <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"><span className="rounded-full bg-white/85 px-3 py-1 text-[12px] font-black text-[var(--ink)] shadow-sm backdrop-blur">{tr('drawBubble')}</span></div>
               )}
               {phase === 'aim' && (
-                <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"><span className="rounded-full bg-white/85 px-3 py-1 text-[12px] font-black text-[var(--ink)] shadow-sm backdrop-blur">下で回して → 上までスワイプ</span></div>
+                <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"><span className="rounded-full bg-white/85 px-3 py-1 text-[12px] font-black text-[var(--ink)] shadow-sm backdrop-blur">{tr('aimBubble')}</span></div>
               )}
             </div>
 
             <div className="shrink-0 border-t border-[var(--line)] bg-[var(--surface)] px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4">
               {phase === 'draw' && !shapeLocked && (
                 <div className="text-center">
-                  <p className="text-[17px] font-black">形を1筆で描いて</p>
-                  {drawHint ? <p className="mt-1 text-[13px] font-bold text-amber-700">{drawHint}</p> : <p className="mt-1 text-[12px] font-bold text-[var(--muted)]">丸いほど、よく飛ぶ</p>}
+                  <p className="text-[17px] font-black">{tr('drawHint')}</p>
+                  {drawHint ? <p className="mt-1 text-[13px] font-bold text-amber-700">{drawHint}</p> : <p className="mt-1 text-[12px] font-bold text-[var(--muted)]">{tr('drawSub')}</p>}
                 </div>
               )}
               {phase === 'draw' && shapeLocked && (
-                <button onClick={goToAim} className={`${CTA} w-full py-4`}>投げるへ進む <ArrowRight size={18} /></button>
+                <button onClick={goToAim} className={`${CTA} w-full py-4`}>{tr('toThrow')} <ArrowRight size={18} /></button>
               )}
               {phase === 'aim' && (
                 <div>
-                  <p className="flex items-center justify-center gap-2 text-center text-[17px] font-black"><RotateCw size={22} className={`shrink-0 ${spinShown > 0 ? 'text-[#ff2e88]' : 'text-[var(--muted)]'} animate-spin`} style={{ animationDuration: spinShown > 0 ? `${Math.max(0.22, 1.15 - (spinPct / 100) * 0.95)}s` : '1.2s', animationPlayState: spinShown > 0 || momentumLive ? 'running' : 'paused', animationDirection: spinDir < 0 ? 'reverse' : 'normal' }} aria-hidden="true" />回して、そのまま上までスワイプ</p>
-                  <p className="mt-1 text-center text-[12px] font-bold text-[var(--muted)]">{spinShown > 0 ? `描いた形の歪みと表面のラインが${spinDir < 0 ? '反時計回り' : '時計回り'}に回っているよ` : '形の歪みと表面のラインが回り出したら勢いあり'}</p>
+                  <p className="flex items-center justify-center gap-2 text-center text-[17px] font-black"><RotateCw size={22} className={`shrink-0 ${spinShown > 0 ? 'text-[#ff2e88]' : 'text-[var(--muted)]'} animate-spin`} style={{ animationDuration: spinShown > 0 ? `${Math.max(0.22, 1.15 - (spinPct / 100) * 0.95)}s` : '1.2s', animationPlayState: spinShown > 0 || momentumLive ? 'running' : 'paused', animationDirection: spinDir < 0 ? 'reverse' : 'normal' }} aria-hidden="true" />{tr('aimHint')}</p>
+                  <p className="mt-1 text-center text-[12px] font-bold text-[var(--muted)]">{spinShown > 0 ? tr('aimSpinning', { dir: spinDir < 0 ? tr('dir.ccw') : tr('dir.cw') }) : tr('aimIdle')}</p>
                   <div className="mt-3 flex items-center gap-3">
-                    <span className="w-10 shrink-0 text-[13px] font-black text-[var(--muted)]">回転</span>
+                    <span className="w-10 shrink-0 text-[13px] font-black text-[var(--muted)]">{tr('stat.spin')}</span>
                     <div className={`h-3 flex-1 overflow-hidden rounded-full bg-black/10 ${spinHot ? 'gauge-glow' : ''}`}>
                       <div className="h-full rounded-full transition-[width] duration-150" style={{ width: `${spinPct}%`, background: momentumLive ? 'linear-gradient(90deg,#00e5ff,#ff2e88,#a100ff)' : spinShown > 0 ? '#00e5ff' : 'transparent' }} />
                     </div>
@@ -1269,12 +1271,12 @@ export default function App() {
                 </div>
               )}
               {phase === 'flying' && (
-                <p className="py-2 text-center text-[17px] font-black">飛んでいます…</p>
+                <p className="py-2 text-center text-[17px] font-black">{tr('flying')}</p>
               )}
               {phase === 'landed' && lastThrow && (
                 <div>
                   <p className="text-center text-[15px] font-black text-[var(--muted)]">{fmt(lastThrow.distance)} <span className="text-[var(--muted)]">= {fmtScore(lastThrow.total)}</span></p>
-                  <button ref={nextButtonRef} onClick={finishGame} className={`${CTA} mt-3 w-full py-4`}>結果を見る <ArrowRight size={18} /></button>
+                  <button ref={nextButtonRef} onClick={finishGame} className={`${CTA} mt-3 w-full py-4`}>{tr('seeResult')} <ArrowRight size={18} /></button>
                 </div>
               )}
             </div>
@@ -1284,8 +1286,8 @@ export default function App() {
         {screen === 'result' && result.throw && (
           <main className="mx-auto flex w-full max-w-[600px] flex-1 flex-col px-5 pb-8 pt-6">
             <header className="flex items-center justify-between">
-              <span className="text-[15px] font-black tracking-tight">フライングディスク</span>
-              <nav aria-label="進み具合" className="flex items-center gap-1.5">
+              <span className="text-[15px] font-black tracking-tight">{tr('app.title')}</span>
+              <nav aria-label={tr("progress")} className="flex items-center gap-1.5">
                 {steps.map((label, i) => (
                   <React.Fragment key={label}>
                     <span className={`rounded-full px-2 py-1 text-center text-[11px] font-black ${i === 2 ? 'bg-[var(--accent)] text-white' : 'bg-[var(--accent-soft)] text-[var(--accent)]'}`}>{label}</span>
@@ -1297,19 +1299,19 @@ export default function App() {
             <div className="mt-8 text-center">
               <p className="text-xs font-bold tracking-[0.22em] text-[var(--muted)]">FLYING DISTANCE</p>
               <p className="mt-2 bg-gradient-to-r from-[#ff6a00] via-[#ff2e88] to-[#a100ff] bg-clip-text text-[clamp(56px,17vw,76px)] font-black leading-none tracking-tight text-transparent">{displayedTotal.toFixed(1)}<span className="text-[24px]">m</span></p>
-              <p className="mt-2 text-sm font-bold text-[var(--muted)]">スコア = 飛距離のみ ・ {fmtScore(result.total)}</p>
+              <p className="mt-2 text-sm font-bold text-[var(--muted)]">{tr("scoreIsDistance")} ・ {fmtScore(result.total)}</p>
               {rankShown && <div className="rank-bang mt-4 text-[56px] font-black leading-none text-[var(--accent)]">{result.rank}</div>}
               {!rankShown && <div className="mt-4 h-[56px]" aria-hidden="true" />}
-              {isNewBest && <p className="mx-auto mt-3 flex w-fit items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-sm font-black text-[var(--accent)] shadow-sm"><Sparkles size={15} /> 自己ベスト更新</p>}
+              {isNewBest && <p className="mx-auto mt-3 flex w-fit items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-sm font-black text-[var(--accent)] shadow-sm"><Sparkles size={15} /> {tr('newRecord')}</p>}
             </div>
 
             <div className="mt-6 overflow-hidden rounded-[20px] border border-[var(--line)] bg-[var(--surface)] shadow-[0_10px_28px_rgba(22,48,42,.07)]">
-              <div className="border-b border-[var(--line)] px-4 py-3"><p className="text-[12px] font-black tracking-widest text-[var(--muted)]">飛距離 = 形状 × 回転 × 加速度</p></div>
+              <div className="border-b border-[var(--line)] px-4 py-3"><p className="text-[12px] font-black tracking-widest text-[var(--muted)]">{tr('formula')}</p></div>
               <div className="divide-y divide-[var(--line)]">
                 {resultFactors?.list.map((f, i) => (
                   <div key={f.label} className="px-4 py-3">
                     <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-2 text-sm font-black">{f.label}{i === resultFactors.bestIdx && <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-black text-[var(--accent)]">決め手</span>}</span>
+                      <span className="flex items-center gap-2 text-sm font-black">{f.label}{i === resultFactors.bestIdx && <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-black text-[var(--accent)]">{tr('spin.decisive')}</span>}</span>
                       <span className="text-sm font-black tabular-nums">{f.value}</span>
                     </div>
                     <div className="mt-2 flex items-center gap-2">
@@ -1322,8 +1324,8 @@ export default function App() {
             </div>
 
             <div className="mt-auto pt-8">
-              <button onClick={startGame} className={`${CTA} w-full py-5 text-[20px]`}><RotateCcw size={20} /> もう一度投げる</button>
-              <button onClick={() => setScreen('start')} className="ghost-btn mx-auto mt-3 flex items-center justify-center gap-2 rounded-full bg-[var(--surface)] px-6 py-3 font-bold"><Home size={18} /> タイトルに戻る</button>
+              <button onClick={startGame} className={`${CTA} w-full py-5 text-[20px]`}><RotateCcw size={20} /> {tr('again')}</button>
+              <button onClick={() => setScreen('start')} className="ghost-btn mx-auto mt-3 flex items-center justify-center gap-2 rounded-full bg-[var(--surface)] px-6 py-3 font-bold"><Home size={18} /> {tr('backToTitle')}</button>
             </div>
             {apiNote && <p className="mt-3 text-center text-xs text-amber-700">{apiNote}</p>}
           </main>

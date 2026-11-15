@@ -1,22 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
 import GameApp from "./GameApp";
+import { RankingModal } from "./components/RankingModal";
 import { ApiError, claimName, fetchConfig, fetchMe } from "./lib/session";
+import { tr, useI18n } from "./lib/i18n";
 import { useTurnstile } from "./lib/turnstile";
 import { NAME_MAX } from "./shared/types";
 
 /**
- * ゲーム本体は GameApp（オリジナルの実装をそのまま使用）。
- * ここでは「最初に名前を決める + ボット判定」だけを前段に置く。
+ * ゲーム本体は GameApp（オリジナル実装をほぼそのまま使用）。
+ * ここでは「名前を決める + ボット判定」と「ランキング / 言語切替」の UI を載せる。
  */
 export default function App() {
+  useI18n();
+  const { lang, toggle: toggleLang } = useI18n();
+
   const [checked, setChecked] = useState(false);
   const [user, setUser] = useState<{ name: string } | null>(null);
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rankingOpen, setRankingOpen] = useState(false);
 
-  const turnstile = useTurnstile(siteKey, "ja");
+  const turnstile = useTurnstile(siteKey, lang);
 
   useEffect(() => {
     void (async () => {
@@ -36,7 +42,7 @@ export default function App() {
       if (busy) return;
       const trimmed = name.trim();
       if (trimmed.length < 2) {
-        setError("名前は2文字以上にしてください");
+        setError(tr("gate.errShort"));
         return;
       }
       setBusy(true);
@@ -46,32 +52,21 @@ export default function App() {
         try {
           token = await turnstile.execute();
         } catch {
-          setError("ボット判定に失敗しました。ページを再読み込みしてお試しください");
+          setError(tr("gate.errBot"));
           setBusy(false);
           return;
         }
         const res = await claimName(trimmed, token);
-        if (res.user) {
-          setUser(res.user);
-          try {
-            localStorage.setItem("dopa_name", res.user.name);
-          } catch {
-            /* noop */
-          }
-        }
+        if (res.user) setUser(res.user);
+        else setError(tr("gate.errOther"));
       } catch (err) {
-        // 原因が分かるようにサーバーのメッセージをそのまま出す
         console.warn("[register]", err);
         if (err instanceof ApiError) {
-          if (err.status === 403) {
-            setError("ボット判定に失敗しました。ページを再読み込みしてお試しください");
-          } else if (err.status === 0) {
-            setError("通信できませんでした。電波の良い場所でもう一度お試しください");
-          } else {
-            setError(`${err.message}（${err.status}）`);
-          }
+          if (err.status === 403) setError(tr("gate.errBot"));
+          else if (err.status === 0) setError(tr("gate.errNet"));
+          else setError(`${err.message}（${err.status}）`);
         } else {
-          setError("登録に失敗しました。もう一度お試しください");
+          setError(tr("gate.errOther"));
         }
       } finally {
         setBusy(false);
@@ -84,20 +79,55 @@ export default function App() {
     <>
       <GameApp />
 
+      {/* ランキング / 言語切替（ゲーム画面の左下に小さく置く） */}
+      {user && (
+        <div
+          className="fixed left-2 z-[65] flex items-center gap-1.5"
+          style={{ bottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+        >
+          <button
+            type="button"
+            onClick={() => setRankingOpen(true)}
+            className="flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)]/90 px-2.5 py-1 text-[11px] font-black text-[var(--ink)] shadow-sm backdrop-blur"
+          >
+            🏆 {tr("float.ranking")}
+          </button>
+          <button
+            type="button"
+            onClick={toggleLang}
+            className="rounded-full border border-[var(--line)] bg-[var(--surface)]/90 px-2 py-1 text-[11px] font-black text-[var(--ink)] shadow-sm backdrop-blur"
+            aria-label={lang === "ja" ? "English" : "日本語"}
+          >
+            {lang === "ja" ? "EN" : "JA"}
+          </button>
+        </div>
+      )}
+
+      <RankingModal open={rankingOpen} me={user?.name ?? null} onClose={() => setRankingOpen(false)} />
+
       {checked && !user && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-[#14103a]/55 p-4 backdrop-blur-sm">
           <form
             onSubmit={start}
             className="w-full max-w-sm rounded-3xl border-2 border-[var(--line)] bg-[var(--surface)] p-5 shadow-xl"
           >
-            <p className="text-center text-[11px] font-black tracking-[0.2em] text-[var(--accent)]">
-              PLAYER NAME
-            </p>
+            <div className="flex items-start justify-between">
+              <p className="text-[11px] font-black tracking-[0.2em] text-[var(--accent)]">
+                PLAYER NAME
+              </p>
+              <button
+                type="button"
+                onClick={toggleLang}
+                className="rounded-full border border-[var(--line)] bg-[var(--bg)] px-2 py-0.5 text-[11px] font-black text-[var(--ink)]"
+              >
+                {lang === "ja" ? "EN" : "JA"}
+              </button>
+            </div>
             <h1 className="mt-1 text-center text-xl font-black text-[var(--ink)]">
-              名前を決めてスタート
+              {tr("gate.title")}
             </h1>
             <p className="mt-2 text-center text-xs font-bold leading-relaxed text-[var(--muted)]">
-              パスワードは不要です。ランキングに表示される名前だけ決めてください。
+              {tr("gate.desc")}
             </p>
 
             <input
@@ -108,8 +138,8 @@ export default function App() {
               }}
               maxLength={NAME_MAX}
               autoFocus
-              aria-label="プレイヤー名"
-              placeholder="2〜16文字"
+              aria-label={tr("gate.title")}
+              placeholder={tr("gate.placeholder")}
               className="mt-4 w-full rounded-xl border-2 border-[var(--line)] bg-[var(--bg)] px-3 py-3 text-center text-base font-black text-[var(--ink)] outline-none"
             />
 
@@ -126,11 +156,11 @@ export default function App() {
               disabled={busy}
               className="mt-2 w-full rounded-xl bg-[var(--accent)] py-3.5 text-base font-black text-white shadow-[0_5px_0_var(--accent-deep)] transition active:translate-y-1 active:shadow-none disabled:opacity-60"
             >
-              {busy ? "確認中…" : "この名前ではじめる"}
+              {busy ? tr("gate.checking") : tr("gate.start")}
             </button>
 
             <p className="mt-3 text-center text-[10px] font-bold text-[var(--muted)]">
-              ボット判定: Cloudflare Turnstile
+              {tr("gate.bot")}
             </p>
 
             <div ref={turnstile.containerRef} className="mt-1 flex justify-center" />

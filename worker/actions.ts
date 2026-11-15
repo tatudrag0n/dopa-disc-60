@@ -78,7 +78,7 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
     if (!Number.isFinite(best) || !Number.isFinite(total)) {
       return json({ error: "スコアの形式が不正です" }, 400);
     }
-    if (best < 0 || best > 1000 || total < 0 || total > 1000) {
+    if (best < 0 || best > 100000 || total < 0 || total > 100000) {
       return json({ error: "スコアが範囲外です" }, 400);
     }
 
