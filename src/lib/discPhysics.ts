@@ -42,6 +42,9 @@ export interface DiscPhysics {
   offset: number;
   /** 質量バランス 1-offset */
   balance: number;
+  /** 最小外接円の半径と中心（見た目の中心） */
+  enclosingRadius: number;
+  enclosingCenter: Pt;
   /** 外接円に対する面積の充填率 0..1 */
   fill: number;
   /** 面積の妥当さ 1..0（小さすぎ・大きすぎを減点） */
@@ -134,6 +137,61 @@ function radiusHarmonics(pts: Pt[], centroid: Pt, count = 64, maxOrder = 8): num
 }
 
 /**
+ * 最小外接円（smallest enclosing circle）。
+ * 見た目の中心＝この円の中心として使う。
+ * 決定的な順序で回す単純な逐次法（点数が 48 程度なので十分速い）。
+ */
+function minimumEnclosingCircle(pts: Pt[]): { x: number; y: number; r: number } {
+  const inside = (p: Pt, c: { x: number; y: number; r: number }) =>
+    Math.hypot(p.x - c.x, p.y - c.y) <= c.r + 1e-9;
+
+  const two = (a: Pt, b: Pt) => {
+    const x = (a.x + b.x) / 2;
+    const y = (a.y + b.y) / 2;
+    return { x, y, r: Math.hypot(a.x - x, a.y - y) };
+  };
+
+  const three = (a: Pt, b: Pt, c: Pt) => {
+    const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+    if (Math.abs(d) < 1e-12) {
+      // 一直線なら最長辺を直径にする
+      const pairs: [Pt, Pt][] = [
+        [a, b],
+        [b, c],
+        [a, c],
+      ];
+      let best = two(a, b);
+      for (const [p, q] of pairs) {
+        const cand = two(p, q);
+        if (cand.r > best.r) best = cand;
+      }
+      return best;
+    }
+    const a2 = a.x * a.x + a.y * a.y;
+    const b2 = b.x * b.x + b.y * b.y;
+    const c2 = c.x * c.x + c.y * c.y;
+    const x = (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d;
+    const y = (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d;
+    return { x, y, r: Math.hypot(a.x - x, a.y - y) };
+  };
+
+  let c = { x: pts[0].x, y: pts[0].y, r: 0 };
+  for (let i = 1; i < pts.length; i += 1) {
+    if (inside(pts[i], c)) continue;
+    c = { x: pts[i].x, y: pts[i].y, r: 0 };
+    for (let j = 0; j < i; j += 1) {
+      if (inside(pts[j], c)) continue;
+      c = two(pts[i], pts[j]);
+      for (let k = 0; k < j; k += 1) {
+        if (inside(pts[k], c)) continue;
+        c = three(pts[i], pts[j], pts[k]);
+      }
+    }
+  }
+  return c;
+}
+
+/**
  * 形状を物理量として評価する。
  * @param pts 閉じた多角形（重心まわり・最大径 1 程度に正規化済みを想定）
  */
@@ -153,36 +211,25 @@ export function analyzeDisc(pts: Pt[]): DiscPhysics {
   const wobble = clamp(1 - wobbleAmount, 0, 1);
   const smoothness = clamp(1 - roughnessAmount * 2.2, 0, 1);
 
-  // --- 重心の偏り ---
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  let maxR = 1e-6;
-  for (const p of pts) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
-    const d = Math.hypot(p.x - centroid.x, p.y - centroid.y);
-    if (d > maxR) maxR = d;
-  }
-  const boxR = Math.max(1e-6, Math.hypot(maxX - minX, maxY - minY) / 2);
-  const offset = clamp(
-    Math.hypot(centroid.x - (minX + maxX) / 2, centroid.y - (minY + maxY) / 2) / boxR,
-    0,
-    1,
-  );
+  // --- 見た目の中心＝最小外接円の中心 ---
+  const mec = minimumEnclosingCircle(pts);
+  const mecR = Math.max(1e-6, mec.r);
+
+  // 質量バランス: 面積重心が見た目の中心からどれだけずれているか。
+  // ずれているほど回転軸から外れた力が立ち、ぶれる。
+  const offset = clamp(Math.hypot(centroid.x - mec.x, centroid.y - mec.y) / mecR, 0, 1);
   const balance = 1 - offset;
 
-  // --- 面積の妥当さ（小さすぎると揚力不足、外接円を超えることはない） ---
-  const fill = clamp(area / (Math.PI * maxR * maxR), 0, 1);
-  const areaFactor = clamp(0.35 + 0.65 * fill, 0, 1);
+  // --- 面積の妥当さ（外接円をどれだけ埋めているか） ---
+  const fill = clamp(area / (Math.PI * mecR * mecR), 0, 1);
+  // 面積そのものは揚力と質量の両方に効いて相殺するので減点しない。
+  // ただし極端に細い形（スリバー）は平面形として成立しないので減点する。
+  const areaFactor = fill >= 0.3 ? 1 : 0.55 + 0.45 * (fill / 0.3);
 
   // --- 揚力・抗力 ---
-  // 揚力: 面積と、回転対称で滑らかなこと
+  // 揚力: 主に面の滑らかさ（面積は質量と相殺するので弱くしか効かせない）
   // 抗力: 等周比の悪化（ざらつき）＋高次ハーモニクス＋非対称
-  const lift = 0.95 * areaFactor * (0.55 + 0.45 * smoothness);
+  const lift = 0.95 * (0.55 + 0.45 * smoothness) * areaFactor;
   const drag =
     0.08 +
     0.28 * (1 - roundness) +
@@ -223,6 +270,8 @@ export function analyzeDisc(pts: Pt[]): DiscPhysics {
     smoothness,
     offset,
     balance,
+    enclosingRadius: mecR,
+    enclosingCenter: mec,
     fill,
     areaFactor,
     lift,
