@@ -1,416 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;800;900&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg: #d8f1ff;
+  --surface: #ffffff;
+  --surface-2: #e8f8ff;
+  --ink: #14103a;
+  --muted: #5b5a8a;
+  --sky: #0090ff;
+  --sky-soft: #bdeaff;
+  --grass: #00d26a;
+  --grass-deep: #00a844;
+  --accent: #ff2e88;
+  --accent-deep: #c400ff;
+  --accent-soft: #ffe0ef;
+  --sun: #ffe600;
+  --coral: #ff6a00;
+  --line: rgba(0, 144, 255, .16);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0a1030; --surface: #171b4d; --surface-2: #1e2470; --ink: #ffffff; --muted: #b9c4ff; --sky: #0090ff; --sky-soft: #173a6e; --grass: #00e676; --grass-deep: #00a844; --accent: #ff4da6; --accent-deep: #c400ff; --accent-soft: #3a1a4d; --sun: #ffe600; --coral: #ff8a00; --line: rgba(255,255,255,.18); }
+}
+* { -webkit-tap-highlight-color: transparent; }
+html, body, #root { margin: 0; min-height: 100%; background: var(--bg); }
+body { font-family: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', sans-serif; color: var(--ink); overflow-x: clip; letter-spacing: .01em; }
+button { font-family: inherit; }
+.calm-btn {
+  background: linear-gradient(90deg, #ff6a00 0%, #ff2e88 48%, #a100ff 100%);
+  box-shadow: 0 12px 28px rgba(255, 46, 136, .38), 0 4px 0 rgba(120, 0, 180, .25), inset 0 1px 0 rgba(255,255,255,.45);
+  transition: transform .16s cubic-bezier(.2,1.4,.4,1), box-shadow .16s ease, filter .16s ease;
+}
+.calm-btn:hover { filter: brightness(1.07) saturate(1.08); }
+.calm-btn:active { transform: translateY(2px) scale(.985); box-shadow: 0 5px 12px rgba(255, 46, 136, .28), inset 0 1px 0 rgba(255,255,255,.3); }
+.ghost-btn { transition: transform .16s cubic-bezier(.2,1.4,.4,1), box-shadow .16s ease, background .16s ease; box-shadow: 0 4px 12px rgba(0, 90, 255, .08); }
+.ghost-btn:active { transform: translateY(1px) scale(.985); }
+@keyframes floaty { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-5px) rotate(1deg); } }
+@keyframes popIn { 0% { transform: translateY(6px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+.floaty { animation: floaty 3.2s ease-in-out infinite; }
+.pop-in { animation: popIn .28s cubic-bezier(.2,1.2,.4,1) both; }
+@keyframes juiceShake { 0% { transform: translate(0,0); } 20% { transform: translate(-3px,2px); } 40% { transform: translate(3px,-2px); } 60% { transform: translate(-2px,-1px); } 80% { transform: translate(2px,1px); } 100% { transform: translate(0,0); } }
+@keyframes perfectPop { 0% { transform: scale(.6) rotate(-3deg); opacity: 0; } 45% { transform: scale(1.12) rotate(1deg); opacity: 1; } 70% { transform: scale(.98); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes streakPop { 0% { transform: translateY(8px) scale(.7); opacity: 0; } 35% { transform: translateY(0) scale(1.15); opacity: 1; } 65% { transform: scale(.97); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes recordPop { 0% { transform: scale(.5) rotate(-2deg); opacity: 0; } 50% { transform: scale(1.08) rotate(1deg); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes landPop { 0% { transform: scale(.7); opacity: 0; } 45% { transform: scale(1.14); opacity: 1; } 75% { transform: scale(.96); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes rankBang { 0% { transform: scale(.4) rotate(-4deg); opacity: 0; } 55% { transform: scale(1.18) rotate(2deg); opacity: 1; } 80% { transform: scale(.94); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes gaugeGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(255,46,136,.55), 0 0 14px rgba(0,229,255,.85); } 50% { box-shadow: 0 0 0 4px rgba(255,46,136,.12), 0 0 26px rgba(255,46,136,.95); } }
+@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(220%); } }
+.juice-shake { animation: juiceShake .28s ease-in-out; }
+.perfect-pop { animation: perfectPop .55s cubic-bezier(.2,1.4,.4,1) both; }
+.streak-pop { animation: streakPop .5s cubic-bezier(.2,1.4,.4,1) both; }
+.record-pop { animation: recordPop .6s cubic-bezier(.2,1.4,.4,1) both; }
+.land-pop { animation: landPop .45s cubic-bezier(.2,1.4,.4,1) both; }
+.rank-bang { animation: rankBang .6s cubic-bezier(.2,1.4,.4,1) both; }
+.gauge-glow { animation: gaugeGlow .7s ease-in-out infinite; }
+
 /* --------------------------------------------------------------- *
- * デザイントークン
- * light / dark を CSS 変数だけで切り替える。Tailwind の任意値
- * （bg-[var(--bg)] など）と併用する。
+ * セーフエリア変数
+ * ホスト側（元の実行環境）が注入していたもの。未定義だと
+ * calc(100dvh - var(--safe-area-inset-top)) が無効になり、
+ * ゲーム領域の高さが 0 に潰れて画面が真っ白になる。
  * --------------------------------------------------------------- */
 :root {
-  --bg: #fff8e7;
-  --surface: #ffffff;
-  --surface-2: #fff0f6;
-  --ink: #1c1030;
-  --muted: #5f5470;
-  --line: #22143a;
-  --pink: #ff2d78;
-  --violet: #7a00ff;
-  --cyan: #00c8ef;
-  --yellow: #ffd400;
-  --green: #00c853;
-  --danger: #e11d48;
-
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
   --safe-area-inset-right: env(safe-area-inset-right, 0px);
-
-  color-scheme: light;
-}
-
-:root[data-theme="dark"] {
-  --bg: #150826;
-  --surface: #23113f;
-  --surface-2: #31165a;
-  --ink: #fff7e8;
-  --muted: #d6c9ef;
-  --line: #fff7e8;
-  --pink: #ff4d93;
-  --violet: #a55cff;
-  --cyan: #35e0ff;
-  --yellow: #ffe14d;
-  --green: #2ee66b;
-  --danger: #ff5b78;
-  color-scheme: dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #150826;
-    --surface: #23113f;
-    --surface-2: #31165a;
-    --ink: #fff7e8;
-    --muted: #d6c9ef;
-    --line: #fff7e8;
-    --pink: #ff4d93;
-    --violet: #a55cff;
-    --cyan: #35e0ff;
-    --yellow: #ffe14d;
-    --green: #2ee66b;
-    --danger: #ff5b78;
-    color-scheme: dark;
-  }
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  margin: 0;
-  min-height: 100%;
-}
-
-html {
-  -webkit-text-size-adjust: 100%;
-  scroll-behavior: smooth;
-}
-
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Yu Gothic",
-    Meiryo, system-ui, sans-serif;
-  line-height: 1.6;
-  overscroll-behavior-y: none;
-  -webkit-tap-highlight-color: transparent;
-  text-rendering: optimizeLegibility;
-}
-
-/* ゲーム中はページスクロールを止める（iOS の引っ張り更新対策） */
-body.dopa-locked {
-  overflow: hidden;
-  position: fixed;
-  inset: 0;
-  width: 100%;
-}
-
-/* フォーカスリング（キーボード操作でも見えるように） */
-:focus-visible {
-  outline: 3px solid var(--cyan);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-::selection {
-  background: var(--yellow);
-  color: #1c1030;
-}
-
-.display-font {
-  font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Yu Gothic",
-    Meiryo, system-ui, sans-serif;
-  letter-spacing: -0.02em;
-}
-
-/* 背景のドット模様 */
-.hero-dots {
-  background-image: radial-gradient(circle, rgba(255, 45, 120, 0.18) 2px, transparent 2.5px),
-    radial-gradient(circle, rgba(122, 0, 255, 0.14) 2px, transparent 2.5px);
-  background-size: 26px 26px, 34px 34px;
-  background-position: 0 0, 13px 17px;
-}
-
-:root[data-theme="dark"] .hero-dots {
-  background-image: radial-gradient(circle, rgba(255, 77, 147, 0.16) 2px, transparent 2.5px),
-    radial-gradient(circle, rgba(165, 92, 255, 0.14) 2px, transparent 2.5px);
-}
-
-/* 立体ボタン */
-.btn-3d {
-  border: 2px solid var(--line);
-  box-shadow: 0 6px 0 var(--line);
-  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
-}
-.btn-3d:hover {
-  filter: brightness(1.05);
-  transform: translateY(-1px);
-  box-shadow: 0 7px 0 var(--line);
-}
-.btn-3d:active {
-  transform: translateY(5px);
-  box-shadow: 0 1px 0 var(--line);
-}
-.btn-3d:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-  transform: none;
-  box-shadow: 0 6px 0 var(--line);
-}
-
-.play-btn {
-  background: linear-gradient(100deg, var(--pink) 0%, var(--violet) 58%, #3b0aff 100%);
-  color: #fff;
-}
-
-.card {
-  border: 3px solid var(--line);
-  box-shadow: 8px 8px 0 var(--line);
-  background: var(--surface);
-}
-
-@media (max-width: 640px) {
-  .card {
-    box-shadow: 5px 5px 0 var(--line);
-  }
-}
-
-/* アニメーション */
-@keyframes pop {
-  0% {
-    transform: scale(0.92);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-.pop {
-  animation: pop 0.22s ease both;
-}
-
-@keyframes floaty {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-4deg);
-  }
-  50% {
-    transform: translateY(-9px) rotate(4deg);
-  }
-}
-.floaty {
-  animation: floaty 3.2s ease-in-out infinite;
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.rise {
-  animation: rise 0.4s ease both;
-}
-
-@keyframes popIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  60% {
-    transform: scale(1.02);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-.pop-in {
-  animation: popIn 0.34s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
-}
-
-/* 横スクロール領域のスクロールバーを隠す */
-.no-scrollbar {
-  scrollbar-width: none;
-}
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-/* --------------------------------------------------------------- *
- * CSS 変数にアルファを掛ける Tailwind 記法（bg-[var(--x)]/40）は
- * v3 では生成されず、無効なクラスとして捨てられる。
- * 代わりに color-mix で半透明を作る。
- * --------------------------------------------------------------- */
-.line-soft {
-  border-color: color-mix(in srgb, var(--line) 26%, transparent);
-}
-.line-faint {
-  border-color: color-mix(in srgb, var(--line) 16%, transparent);
-}
-.divide-soft > :not([hidden]) ~ :not([hidden]) {
-  border-color: color-mix(in srgb, var(--line) 16%, transparent);
-}
-.bg-soft-yellow {
-  background-color: color-mix(in srgb, var(--yellow) 42%, transparent);
-}
-.bg-soft-yellow-strong {
-  background-color: color-mix(in srgb, var(--yellow) 36%, transparent);
-}
-
-/* 動きを減らす設定を尊重 */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* --------------------------------------------------------------- *
- * ゲーム画面
- * 原作 dopa_disc_60/index.html の見た目をそのまま再現する。
- * 色・余白・角丸は原作の CSS に合わせているので、変えるときは注意。
- * --------------------------------------------------------------- */
-.game-root {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: #0a7cff;
-  color: #fff;
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
-}
-
-.game-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 14px 6px;
-  padding-top: max(10px, env(safe-area-inset-top));
-}
-
-.game-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-}
-
-.game-step {
-  flex-shrink: 0;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.22);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.game-best {
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
-  color: #111;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.game-stage {
-  position: relative;
-  flex: 1;
-  overflow: hidden;
-}
-
-.game-sky {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, #1a8cff 0%, #4fc3ff 55%, #a8e6ff 82%, #d9f7d9 100%);
-}
-
-.game-ground {
-  position: absolute;
-  left: -10%;
-  right: -10%;
-  bottom: -6%;
-  height: 52%;
-  background: linear-gradient(180deg, #2ee66b 0%, #1ccf5a 55%, #12b84a 100%);
-  border-top: 6px solid #a8e6ff;
-  border-radius: 50% 50% 0 0 / 28px 28px 0 0;
-}
-
-.game-horizon {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 48%;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.6);
-}
-
-.game-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* 円盤レイヤーはイベントを透過させる（原作の #discCanvas と同じ）。
-   これを忘れると上のキャンバスが入力を奪って描けなくなる。 */
-.game-disc {
-  pointer-events: none;
-}
-
-.game-stage {
-  cursor: crosshair;
-}
-
-.game-info {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 10px 14px 14px;
-  padding-bottom: max(14px, env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.18));
-  text-align: center;
-  pointer-events: none;
-}
-
-.game-msg {
-  display: inline-block;
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.38);
-  font-size: 14px;
-  font-weight: 700;
-  backdrop-filter: blur(6px);
-}
-
-.game-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  margin-top: 8px;
-}
-
-.game-pill {
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #111;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.game-pill b {
-  color: #ff2e8a;
 }

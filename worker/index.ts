@@ -6,12 +6,12 @@ import {
   getIdentity,
   renameIdentity,
 } from "./auth";
-import { getLeaderboard, submitScore, type ScoreEnv } from "./scores";
+import { handleActions, type ActionsEnv } from "./actions";
 import { turnstileEnabled, verifyTurnstile, type TurnstileEnv } from "./turnstile";
-import { SCORE_RANGES, type ConfigResponse, type MeResponse, type ScoreRange } from "../src/shared/types";
+import type { ConfigResponse, MeResponse } from "../src/shared/types";
 import { clientKey, fail, json, readJson } from "./util";
 
-export interface Env extends ScoreEnv, TurnstileEnv {
+export interface Env extends ActionsEnv, TurnstileEnv {
   ASSETS: Fetcher;
   /** Turnstile のサイトキー（公開情報） */
   TURNSTILE_SITEKEY?: string;
@@ -21,7 +21,7 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
 
-    if (!url.pathname.startsWith("/api/")) {
+    if (!url.pathname.startsWith("/api/") && url.pathname !== "/actions") {
       return env.ASSETS.fetch(req);
     }
 
@@ -46,7 +46,7 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 async function route(req: Request, env: Env, url: URL): Promise<Response> {
-  const path = url.pathname.replace(/\/+$/, "") || "/api";
+  const path = url.pathname.replace(/\/+$/, "") || "/";
 
   if (req.method === "GET" && path === "/api/health") {
     return json({ ok: true, turnstile: turnstileEnabled(env) });
@@ -65,60 +65,35 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     return json(payload);
   }
 
-  if (req.method === "GET" && path === "/api/leaderboard") {
-    const identity = await getIdentity(env, req);
-    const raw = url.searchParams.get("range") ?? "all";
-    const range: ScoreRange = (SCORE_RANGES as string[]).includes(raw)
-      ? (raw as ScoreRange)
-      : "all";
-    const limit = Number(url.searchParams.get("limit") ?? "50");
-    return getLeaderboard(env, range, Number.isFinite(limit) ? limit : 50, identity);
+  if (req.method === "POST" && path === "/actions") {
+    const body = await readJson<unknown>(req);
+    return handleActions(env, req, body);
   }
 
-  if (req.method === "POST") {
-    if (path === "/api/me/name") {
-      const body = (await readJson<{ name?: string }>(req)) ?? {};
-      const identity = await getIdentity(env, req);
-      if (!identity) return fail("セッションがありません", 401);
-      const result = await renameIdentity(env, req, typeof body.name === "string" ? body.name : "");
-      if (!result.ok) return fail(result.message, 400);
-      return json({ user: { name: result.identity.name } });
-    }
+  if (req.method === "POST" && path === "/api/me/name") {
+    const body = (await readJson<Record<string, unknown>>(req)) ?? {};
 
-    if (path === "/api/logout") {
-      await destroyIdentity(env, req);
-      return json({ ok: true }, 200, cookieHeader(req, clearedCookie(req)));
-    }
-
-    if (path === "/api/scores") {
-      const body = (await readJson<Record<string, unknown>>(req)) ?? {};
-
-      // ログインはさせない。ボット判定だけ通してもらう。
-      const turnstileToken =
-        typeof body.turnstileToken === "string" ? body.turnstileToken : undefined;
-      if (!(await verifyTurnstile(env, turnstileToken, clientKey(req)))) {
+    // ?create=1 は「新規に名前を登録する」。ここでだけボット判定を行う。
+    if (url.searchParams.get("create") === "1") {
+      const token = typeof body.turnstileToken === "string" ? body.turnstileToken : undefined;
+      if (!(await verifyTurnstile(env, token, clientKey(req)))) {
         return fail("ボット判定に失敗しました。ページを再読み込みしてお試しください", 403);
       }
-
-      let identity = await getIdentity(env, req);
-      let newCookie: string | null = null;
-
-      if (!identity) {
-        // 初回は名前だけ決めてもらう（パスワード不要）
-        const name = typeof body.name === "string" ? body.name : "";
-        if (!name) return fail("名前を入力してください", 400);
-        const created = await createIdentity(env, name);
-        if (!created.ok) return fail(created.message, 400);
-        identity = created.identity;
-        newCookie = created.cookie;
-      }
-
-      const res = await submitScore(env, identity, body);
-      if (!newCookie) return res;
-      const headers = new Headers(res.headers);
-      headers.set("set-cookie", cookieHeader(req, newCookie)["set-cookie"]);
-      return new Response(res.body, { status: res.status, headers });
+      const created = await createIdentity(env, typeof body.name === "string" ? body.name : "");
+      if (!created.ok) return fail(created.message, 400);
+      return json({ user: { name: created.identity.name } }, 200, cookieHeader(req, created.cookie));
     }
+
+    const identity = await getIdentity(env, req);
+    if (!identity) return fail("セッションがありません", 401);
+    const result = await renameIdentity(env, req, typeof body.name === "string" ? body.name : "");
+    if (!result.ok) return fail(result.message, 400);
+    return json({ user: { name: result.identity.name } });
+  }
+
+  if (req.method === "POST" && path === "/api/logout") {
+    await destroyIdentity(env, req);
+    return json({ ok: true }, 200, cookieHeader(req, clearedCookie(req)));
   }
 
   return fail("Not Found", 404);

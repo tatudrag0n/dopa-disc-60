@@ -1,120 +1,134 @@
 import { useCallback, useEffect, useState } from "react";
-import { DiscGame } from "./game/DiscGame";
-import type { PlayResult } from "./game/engine";
-import { InfoSheet } from "./components/InfoSheet";
-import { NameDialog } from "./components/NameDialog";
-import { ResultOverlay } from "./components/ResultOverlay";
-import { usePlayer } from "./lib/usePlayer";
-import { useTheme } from "./lib/theme";
-
-const BEST_KEY = "dopa_best_v2";
-
-function readBest(): number {
-  try {
-    return Number(localStorage.getItem(BEST_KEY) ?? "0") || 0;
-  } catch {
-    return 0;
-  }
-}
+import GameApp from "./GameApp";
+import { ApiError, claimName, fetchConfig, fetchMe } from "./lib/session";
+import { useTurnstile } from "./lib/turnstile";
+import { NAME_MAX } from "./shared/types";
 
 /**
- * サイトを開くとそのままゲームが始まる。
- * ランキングと使い方はゲーム画面の右上から開く。
+ * ゲーム本体は GameApp（オリジナルの実装をそのまま使用）。
+ * ここでは「最初に名前を決める + ボット判定」だけを前段に置く。
  */
 export default function App() {
-  const { user, siteKey, refresh, setUser } = usePlayer();
-  const { theme, toggle: toggleTheme } = useTheme();
+  const [checked, setChecked] = useState(false);
+  const [user, setUser] = useState<{ name: string } | null>(null);
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [result, setResult] = useState<PlayResult | null>(null);
-  const [resetKey, setResetKey] = useState(0);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [best, setBest] = useState(readBest);
-  const [prevBest, setPrevBest] = useState(0);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const turnstile = useTurnstile(siteKey, "ja");
 
   useEffect(() => {
-    document.body.classList.add("dopa-locked");
-    return () => document.body.classList.remove("dopa-locked");
+    void (async () => {
+      const [me, cfg] = await Promise.all([
+        fetchMe().catch(() => null),
+        fetchConfig().catch(() => null),
+      ]);
+      if (me?.user) setUser(me.user);
+      setSiteKey(cfg?.turnstileSiteKey ?? null);
+      setChecked(true);
+    })();
   }, []);
 
-  const handleFinish = useCallback(
-    (r: PlayResult) => {
-      setPrevBest(best);
-      setResult(r);
-      setBest((prev) => {
-        if (r.distance > prev) {
+  const start = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (busy) return;
+      const trimmed = name.trim();
+      if (trimmed.length < 2) {
+        setError("名前は2文字以上にしてください");
+        return;
+      }
+      setBusy(true);
+      setError(null);
+      try {
+        let token = "";
+        try {
+          token = await turnstile.execute();
+        } catch {
+          setError("ボット判定に失敗しました。ページを再読み込みしてお試しください");
+          setBusy(false);
+          return;
+        }
+        const res = await claimName(trimmed, token);
+        if (res.user) {
+          setUser(res.user);
           try {
-            localStorage.setItem(BEST_KEY, String(r.distance));
+            localStorage.setItem("dopa_name", res.user.name);
           } catch {
             /* noop */
           }
-          return r.distance;
         }
-        return prev;
-      });
+      } catch (err) {
+        setError(
+          err instanceof ApiError && err.status === 403
+            ? "ボット判定に失敗しました。ページを再読み込みしてお試しください"
+            : "登録に失敗しました。通信状況を確認してください",
+        );
+      } finally {
+        setBusy(false);
+      }
     },
-    [best],
+    [busy, name, turnstile],
   );
-
-  const handleRetry = useCallback(() => {
-    setResult(null);
-    setResetKey((k) => k + 1);
-  }, []);
-
-  const handleSubmitted = useCallback(() => {
-    setRefreshKey((k) => k + 1);
-    void refresh();
-  }, [refresh]);
 
   return (
     <>
-      <DiscGame
-        onFinish={handleFinish}
-        resetKey={resetKey}
-        best={best}
-        onOpenRanking={() => setSheetOpen(true)}
-      />
+      <GameApp />
 
-      {result && (
-        <ResultOverlay
-          result={result}
-          user={user}
-          siteKey={siteKey}
-          personalBest={prevBest}
-          onRetry={handleRetry}
-          onOpenRanking={() => {
-            setResult(null);
-            setResetKey((k) => k + 1);
-            setSheetOpen(true);
-          }}
-          onPlayerCreated={(name) => setUser({ name })}
-          onSubmitted={handleSubmitted}
-        />
+      {checked && !user && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-[#14103a]/55 p-4 backdrop-blur-sm">
+          <form
+            onSubmit={start}
+            className="w-full max-w-sm rounded-3xl border-2 border-[var(--line)] bg-[var(--surface)] p-5 shadow-xl"
+          >
+            <p className="text-center text-[11px] font-black tracking-[0.2em] text-[var(--accent)]">
+              PLAYER NAME
+            </p>
+            <h1 className="mt-1 text-center text-xl font-black text-[var(--ink)]">
+              名前を決めてスタート
+            </h1>
+            <p className="mt-2 text-center text-xs font-bold leading-relaxed text-[var(--muted)]">
+              パスワードは不要です。ランキングに表示される名前だけ決めてください。
+            </p>
+
+            <input
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setError(null);
+              }}
+              maxLength={NAME_MAX}
+              autoFocus
+              aria-label="プレイヤー名"
+              placeholder="2〜16文字"
+              className="mt-4 w-full rounded-xl border-2 border-[var(--line)] bg-[var(--bg)] px-3 py-3 text-center text-base font-black text-[var(--ink)] outline-none"
+            />
+
+            <div aria-live="polite" className="mt-2 min-h-[18px]">
+              {error && (
+                <p className="rounded-lg bg-[var(--accent)] px-2 py-1.5 text-center text-[11px] font-black text-white">
+                  {error}
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={busy}
+              className="mt-2 w-full rounded-xl bg-[var(--accent)] py-3.5 text-base font-black text-white shadow-[0_5px_0_var(--accent-deep)] transition active:translate-y-1 active:shadow-none disabled:opacity-60"
+            >
+              {busy ? "確認中…" : "この名前ではじめる"}
+            </button>
+
+            <p className="mt-3 text-center text-[10px] font-bold text-[var(--muted)]">
+              ボット判定: Cloudflare Turnstile
+            </p>
+
+            <div ref={turnstile.containerRef} className="mt-1 flex justify-center" />
+          </form>
+        </div>
       )}
-
-      <InfoSheet
-        open={sheetOpen}
-        user={user}
-        theme={theme}
-        refreshKey={refreshKey}
-        onClose={() => setSheetOpen(false)}
-        onToggleTheme={toggleTheme}
-        onRequireName={() => {
-          setSheetOpen(false);
-          setRenameOpen(true);
-        }}
-      />
-
-      <NameDialog
-        open={renameOpen}
-        initialName={user?.name ?? ""}
-        onClose={() => setRenameOpen(false)}
-        onSaved={(name) => {
-          setUser({ name });
-          void refresh();
-        }}
-      />
     </>
   );
 }
