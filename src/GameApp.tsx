@@ -6,7 +6,7 @@ import { analyzeDisc } from './lib/discPhysics';
 type Screen = 'start' | 'playing' | 'result';
 type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string };
 type Phase = 'draw' | 'aim' | 'flying' | 'landed';
-type ShapeWeakest = 'symmetry' | 'roundness' | 'fill' | 'balance' | 'none'
+type ShapeWeakest = 'wobble' | 'roughness' | 'balance' | 'area' | 'closure' | 'none'
 type ThrowResult = { distance: number; total: number; shapeGrade: string; shapeWeakest?: ShapeWeakest; balance: number; spin: number; spinSpeed: number; spinCleanliness: number; swipeSpeed: number; swipeNorm: number; isRecord?: boolean };
 type Pt = { x: number; y: number };
 
@@ -99,9 +99,9 @@ const CTA = 'calm-btn flex items-center justify-center gap-2 rounded-full bg-[va
 function swipeLabel(norm: number) { return norm >= 0.75 ? tr('accel.fast') : norm >= 0.45 ? tr('accel.justRight') : tr('accel.slow'); }
 function shapeWeakLabel(w?: ShapeWeakest) {
   switch (w) {
-    case 'symmetry': return tr('shapeWeak.symmetry');
-    case 'roundness': return tr('shapeWeak.roundness');
-    case 'fill': return tr('shapeWeak.fill');
+    case 'wobble': return tr('shapeWeak.wobble');
+    case 'roughness': return tr('shapeWeak.roughness');
+    case 'area': return tr('shapeWeak.area');
     case 'balance': return tr('shapeWeak.balance');
     default: return tr('shapeWeak.none');
   }
