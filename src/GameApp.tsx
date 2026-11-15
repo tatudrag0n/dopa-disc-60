@@ -155,6 +155,8 @@ function analyzeShape(raw: Pt[]) {
 
 export default function App() {
   useI18n(); // 言語の切り替えで再描画させるために購読する
+  const meName = typeof window !== 'undefined' ? (window as unknown as { __dopaMe?: string }).__dopaMe : undefined;
+  const isMe = (n?: string) => Boolean(meName) && n === meName;
   const [screen, setScreen] = useState<Screen>('start');
   const [muted, setMuted] = useState(false);
   const [highScores, setHighScores] = useState<ScoreRow[]>([]);
@@ -239,7 +241,7 @@ export default function App() {
   const loadScores = useCallback(async () => {
     try {
       const data = await callApi('records.list', { collection: 'flying_disc_distance_scores' });
-      const rows = (data?.records || []).map((r: any) => r.value as ScoreRow).filter((v: any) => typeof v?.best === 'number').sort((a: ScoreRow, b: ScoreRow) => (b.total ?? b.best) - (a.total ?? a.best)).slice(0, 5);
+      const rows = (data?.records || []).map((r: any) => r.value as ScoreRow).filter((v: any) => typeof v?.best === 'number').sort((a: ScoreRow, b: ScoreRow) => (b.total ?? b.best) - (a.total ?? a.best)).slice(0, 50);
       setHighScores(rows); setApiNote('');
       if (rows.length) globalBestRef.current = rows[0].total ?? rows[0].best;
     } catch { setApiNote(tr('loadingBest')); }
@@ -1202,7 +1204,7 @@ export default function App() {
             {showHow && <div className="pop-in mt-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 text-[13px] leading-7">{tr('howto.step1')}<br />{tr('howto.step2')}<br />{tr('howto.resultNote')}</div>}
             <section className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 shadow-sm">
               <h2 className="flex items-center gap-2 text-sm font-black"><Trophy size={17} className="text-[var(--accent)]" /> {tr('top5')}</h2>
-              {highScores.length === 0 ? <p className="mt-3 text-sm text-[var(--muted)]">{tr('noRecords')}</p> : <ol className="mt-3 space-y-2">{highScores.map((r, i) => <li key={i} className="flex items-center justify-between rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm"><span className="font-black">{rankLabel(i + 1)} <span className="ml-1 text-xs text-[var(--muted)]">{r.name}</span> <span className="ml-1 text-[var(--accent)]">{r.rank}</span></span><span className="font-black">{fmtScore(r.total ?? r.best)}</span><span className="text-xs text-[var(--muted)]">{fmt(r.best)}</span></li>)}</ol>}
+              {highScores.length === 0 ? <p className="mt-3 text-sm text-[var(--muted)]">{tr('noRecords')}</p> : <ol className="mt-3 max-h-[42dvh] space-y-2 overflow-y-auto overscroll-contain pr-1">{highScores.map((r, i) => <li key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${isMe(r.name) ? "bg-[var(--accent-soft)] ring-2 ring-[var(--accent)]" : "bg-[var(--surface-2)]"}`}><span className="font-black">{rankLabel(i + 1)} <span className="ml-1 text-xs text-[var(--muted)]">{r.name}</span> <span className="ml-1 text-[var(--accent)]">{r.rank}</span></span><span className="font-black">{fmtScore(r.total ?? r.best)}</span><span className="text-xs text-[var(--muted)]">{fmt(r.best)}</span></li>)}</ol>}
               {apiNote && <p className="mt-2 text-xs text-amber-700">{apiNote}</p>}
             </section>
           </main>

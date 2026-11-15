@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import GameApp from "./GameApp";
-import { RankingModal } from "./components/RankingModal";
-import { RankingPanel } from "./components/RankingPanel";
 import { ApiError, claimName, fetchConfig, fetchMe } from "./lib/session";
 import { tr, useI18n } from "./lib/i18n";
-import { useRanking } from "./lib/useRanking";
 import { useTurnstile } from "./lib/turnstile";
 import { NAME_MAX } from "./shared/types";
 
 /**
  * ゲーム本体は GameApp（オリジナル実装をほぼそのまま使用）。
- * ここでは「名前を決める + ボット判定」と「常時表示のランキング / 言語切替」を載せる。
+ * ここでは「名前を決める + ボット判定」と「言語切替」だけを載せる。
+ * ランキングはゲーム本体のスタート画面（旧スコア TOP 5 の場所）に常時表示している。
  */
 export default function App() {
   useI18n();
@@ -22,10 +20,13 @@ export default function App() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rankingOpen, setRankingOpen] = useState(false);
 
-  const ranking = useRanking();
   const turnstile = useTurnstile(siteKey, lang);
+
+  // ゲーム側が「自分の行」をハイライトできるように名前を渡す
+  useEffect(() => {
+    (window as unknown as { __dopaMe?: string }).__dopaMe = user?.name;
+  }, [user]);
 
   useEffect(() => {
     void (async () => {
@@ -60,10 +61,8 @@ export default function App() {
           return;
         }
         const res = await claimName(trimmed, token);
-        if (res.user) {
-          setUser(res.user);
-          ranking.reload();
-        } else setError(tr("gate.errOther"));
+        if (res.user) setUser(res.user);
+        else setError(tr("gate.errOther"));
       } catch (err) {
         console.warn("[register]", err);
         if (err instanceof ApiError) {
@@ -77,36 +76,18 @@ export default function App() {
         setBusy(false);
       }
     },
-    [busy, name, ranking, turnstile],
+    [busy, name, turnstile],
   );
 
   return (
     <>
-      {/* デスクトップでは右サイドバー分だけゲームを縮める */}
-      <div className="lg:pr-[320px]">
-        <GameApp />
-      </div>
+      <GameApp />
 
-      <RankingPanel
-        rows={ranking.rows}
-        me={user?.name ?? null}
-        onOpenFull={() => setRankingOpen(true)}
-      />
-
-      <RankingModal
-        open={rankingOpen}
-        rows={ranking.rows}
-        loading={ranking.loading}
-        error={ranking.error}
-        me={user?.name ?? null}
-        onClose={() => setRankingOpen(false)}
-      />
-
-      {/* 言語切替: モバイルは右下、デスクトップは左下 */}
+      {/* 言語切替 */}
       <button
         type="button"
         onClick={toggleLang}
-        className="fixed right-2 z-[60] rounded-full border-2 border-[var(--line)] bg-[var(--surface)]/95 px-2.5 py-1.5 text-[11px] font-black text-[var(--ink)] shadow-md backdrop-blur lg:left-2 lg:right-auto"
+        className="fixed right-2 z-[60] rounded-full border-2 border-[var(--line)] bg-[var(--surface)]/95 px-2.5 py-1.5 text-[11px] font-black text-[var(--ink)] shadow-md backdrop-blur"
         style={{ bottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
         aria-label={lang === "ja" ? "English" : "日本語"}
       >

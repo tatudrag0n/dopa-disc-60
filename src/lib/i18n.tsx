@@ -23,7 +23,7 @@ const DICT = {
 
   "start": ["スタート", "Start"],
   "howto": ["遊び方を見る", "How to play"],
-  "top5": ["スコア TOP 5", "Top 5 scores"],
+  "top5": ["ランキング", "Ranking"],
   "noRecords": ["最初の一投で記録を作ろう。", "Make a throw to set the first record."],
   "best": ["自己ベスト", "Personal best"],
   "newRecord": ["自己ベスト更新", "New personal best"],
