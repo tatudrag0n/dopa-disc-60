@@ -1,49 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { X } from "lucide-react";
-import { tr, useI18n } from "../lib/i18n";
-
-interface Row {
-  name: string;
-  best: number;
-  total: number;
-  rank: string;
-  playedAt: string;
-}
+import { rankLabel, tr, useI18n } from "../lib/i18n";
+import type { RankRow } from "../lib/useRanking";
 
 interface Props {
   open: boolean;
+  rows: RankRow[];
+  loading: boolean;
+  error: boolean;
   me: string | null;
   onClose: () => void;
 }
 
-/** 全プレイヤーのランキング（上位 20 件） */
-export function RankingModal({ open, me, onClose }: Props) {
-  useI18n();
-  const [rows, setRows] = useState<Row[] | null>(null);
-  const [error, setError] = useState(false);
+const MEDALS = ["🥇", "🥈", "🥉"];
 
-  useEffect(() => {
-    if (!open) return;
-    setRows(null);
-    setError(false);
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/actions", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "records.list", args: {} }),
-        });
-        const data = (await res.json()) as { records?: { value: Row }[] };
-        if (!cancelled) setRows((data.records ?? []).map((r) => r.value));
-      } catch {
-        if (!cancelled) setError(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
+/** 全プレイヤーのランキング（上位20件）。スマホではここから開く。 */
+export function RankingModal({ open, rows, loading, error, me, onClose }: Props) {
+  useI18n();
 
   useEffect(() => {
     if (!open) return;
@@ -56,7 +29,8 @@ export function RankingModal({ open, me, onClose }: Props) {
 
   if (!open) return null;
 
-  const medal = ["🥇", "🥈", "🥉"];
+  const top = rows.slice(0, 20);
+  const myIndex = me ? rows.findIndex((r) => r.name === me) : -1;
 
   return (
     <div
@@ -81,7 +55,7 @@ export function RankingModal({ open, me, onClose }: Props) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
-          {rows === null && !error && (
+          {loading && top.length === 0 && (
             <p className="py-8 text-center text-sm font-bold text-[var(--muted)]">{tr("flying")}</p>
           )}
           {error && (
@@ -89,15 +63,15 @@ export function RankingModal({ open, me, onClose }: Props) {
               {tr("netRetry")}
             </p>
           )}
-          {rows !== null && rows.length === 0 && (
+          {!loading && !error && top.length === 0 && (
             <p className="py-8 text-center text-sm font-bold text-[var(--muted)]">
               {tr("noRecords")}
             </p>
           )}
 
-          {rows !== null && rows.length > 0 && (
+          {top.length > 0 && (
             <ol className="space-y-1.5">
-              {rows.map((r, i) => {
+              {top.map((r, i) => {
                 const isMe = me !== null && r.name === me;
                 return (
                   <li
@@ -107,7 +81,7 @@ export function RankingModal({ open, me, onClose }: Props) {
                     }`}
                   >
                     <span className="w-7 shrink-0 text-center text-sm font-black text-[var(--muted)]">
-                      {i < 3 ? medal[i] : i + 1}
+                      {i < 3 ? MEDALS[i] : i + 1}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-sm font-black text-[var(--ink)]">
                       {r.name}
@@ -129,7 +103,7 @@ export function RankingModal({ open, me, onClose }: Props) {
         </div>
 
         <div className="border-t-2 border-[var(--line)] px-4 py-2.5 text-center text-[11px] font-bold text-[var(--muted)]">
-          {tr("scoreIsDistance")}
+          {myIndex >= 0 && me ? `${me} — ${rankLabel(myIndex + 1)} / ${tr("scoreIsDistance")}` : tr("scoreIsDistance")}
         </div>
       </div>
     </div>

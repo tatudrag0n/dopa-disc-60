@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import GameApp from "./GameApp";
 import { RankingModal } from "./components/RankingModal";
+import { RankingPanel } from "./components/RankingPanel";
 import { ApiError, claimName, fetchConfig, fetchMe } from "./lib/session";
 import { tr, useI18n } from "./lib/i18n";
+import { useRanking } from "./lib/useRanking";
 import { useTurnstile } from "./lib/turnstile";
 import { NAME_MAX } from "./shared/types";
 
 /**
  * ゲーム本体は GameApp（オリジナル実装をほぼそのまま使用）。
- * ここでは「名前を決める + ボット判定」と「ランキング / 言語切替」の UI を載せる。
+ * ここでは「名前を決める + ボット判定」と「常時表示のランキング / 言語切替」を載せる。
  */
 export default function App() {
   useI18n();
@@ -22,6 +24,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [rankingOpen, setRankingOpen] = useState(false);
 
+  const ranking = useRanking();
   const turnstile = useTurnstile(siteKey, lang);
 
   useEffect(() => {
@@ -57,8 +60,10 @@ export default function App() {
           return;
         }
         const res = await claimName(trimmed, token);
-        if (res.user) setUser(res.user);
-        else setError(tr("gate.errOther"));
+        if (res.user) {
+          setUser(res.user);
+          ranking.reload();
+        } else setError(tr("gate.errOther"));
       } catch (err) {
         console.warn("[register]", err);
         if (err instanceof ApiError) {
@@ -72,38 +77,41 @@ export default function App() {
         setBusy(false);
       }
     },
-    [busy, name, turnstile],
+    [busy, name, ranking, turnstile],
   );
 
   return (
     <>
-      <GameApp />
+      {/* デスクトップでは右サイドバー分だけゲームを縮める */}
+      <div className="lg:pr-[320px]">
+        <GameApp />
+      </div>
 
-      {/* ランキング / 言語切替（ゲーム画面の左下に小さく置く） */}
-      {user && (
-        <div
-          className="fixed left-2 z-[65] flex items-center gap-1.5"
-          style={{ bottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
-        >
-          <button
-            type="button"
-            onClick={() => setRankingOpen(true)}
-            className="flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)]/90 px-2.5 py-1 text-[11px] font-black text-[var(--ink)] shadow-sm backdrop-blur"
-          >
-            🏆 {tr("float.ranking")}
-          </button>
-          <button
-            type="button"
-            onClick={toggleLang}
-            className="rounded-full border border-[var(--line)] bg-[var(--surface)]/90 px-2 py-1 text-[11px] font-black text-[var(--ink)] shadow-sm backdrop-blur"
-            aria-label={lang === "ja" ? "English" : "日本語"}
-          >
-            {lang === "ja" ? "EN" : "JA"}
-          </button>
-        </div>
-      )}
+      <RankingPanel
+        rows={ranking.rows}
+        me={user?.name ?? null}
+        onOpenFull={() => setRankingOpen(true)}
+      />
 
-      <RankingModal open={rankingOpen} me={user?.name ?? null} onClose={() => setRankingOpen(false)} />
+      <RankingModal
+        open={rankingOpen}
+        rows={ranking.rows}
+        loading={ranking.loading}
+        error={ranking.error}
+        me={user?.name ?? null}
+        onClose={() => setRankingOpen(false)}
+      />
+
+      {/* 言語切替: モバイルは右下、デスクトップは左下 */}
+      <button
+        type="button"
+        onClick={toggleLang}
+        className="fixed right-2 z-[60] rounded-full border-2 border-[var(--line)] bg-[var(--surface)]/95 px-2.5 py-1.5 text-[11px] font-black text-[var(--ink)] shadow-md backdrop-blur lg:left-2 lg:right-auto"
+        style={{ bottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+        aria-label={lang === "ja" ? "English" : "日本語"}
+      >
+        {lang === "ja" ? "EN" : "JA"}
+      </button>
 
       {checked && !user && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-[#14103a]/55 p-4 backdrop-blur-sm">

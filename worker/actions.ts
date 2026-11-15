@@ -49,15 +49,17 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
       .all<RunRow>();
 
     return json({
-      records: (results ?? []).map((r) => ({
+      data: {
+        records: (results ?? []).map((r) => ({
         value: {
           name: r.name,
           best: r.best,
           total: r.total,
           rank: r.grade,
-          playedAt: new Date(r.created_at).toISOString(),
-        },
-      })),
+            playedAt: new Date(r.created_at).toISOString(),
+          },
+        })),
+      },
     });
   }
 
@@ -106,7 +108,7 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
       .bind(total)
       .first<{ c: number }>();
 
-    return json({ ok: true, rank: Number(better?.c ?? 0) + 1 });
+    return json({ data: { ok: true, rank: Number(better?.c ?? 0) + 1 } });
   }
 
   return json({ error: `unknown action: ${action}` }, 400);
