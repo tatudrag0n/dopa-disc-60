@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX, Trophy, RotateCcw, Home, ArrowRight, RotateCw, Sparkles } from 'lucide-react';
 import { rankLabel, tr, useI18n } from './lib/i18n';
-import { analyzeDisc } from './lib/discPhysics';
+import { analyzeDisc, minimumEnclosingCircle } from './lib/discPhysics';
 
 type Screen = 'start' | 'playing' | 'result';
 type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string };
@@ -134,11 +134,11 @@ function resampleClosedLoop(raw: Pt[], count = 48): Pt[] {
 }
 function analyzeShape(raw: Pt[]) {
   const n = raw.length;
-  const cx = raw.reduce((s, p) => s + p.x, 0) / n;
-  const cy = raw.reduce((s, p) => s + p.y, 0) / n;
-  const centered = raw.map((p) => ({ x: p.x - cx, y: p.y - cy }));
-  const dists = centered.map((p) => Math.hypot(p.x, p.y));
-  const maxD = Math.max(1, ...dists);
+  // 見た目の中心＝最小外接円の中心を原点にし、その半径で正規化する。
+  // 打点の単純平均だと、ゆっくり描いた側に点が寄って原点がずれてしまう。
+  const mec = minimumEnclosingCircle(raw);
+  const centered = raw.map((p) => ({ x: p.x - mec.x, y: p.y - mec.y }));
+  const maxD = Math.max(1, mec.r);
   // Keep the traced outline exactly as drawn — only centre it, scale it
   // to a common size, and resample it evenly. No circular correction.
   const normalized = centered.map((p) => ({ x: p.x / maxD, y: p.y / maxD }));

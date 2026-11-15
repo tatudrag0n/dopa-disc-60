@@ -141,7 +141,7 @@ function radiusHarmonics(pts: Pt[], centroid: Pt, count = 64, maxOrder = 8): num
  * 見た目の中心＝この円の中心として使う。
  * 決定的な順序で回す単純な逐次法（点数が 48 程度なので十分速い）。
  */
-function minimumEnclosingCircle(pts: Pt[]): { x: number; y: number; r: number } {
+export function minimumEnclosingCircle(pts: Pt[]): { x: number; y: number; r: number } {
   const inside = (p: Pt, c: { x: number; y: number; r: number }) =>
     Math.hypot(p.x - c.x, p.y - c.y) <= c.r + 1e-9;
 
