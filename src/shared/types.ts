@@ -114,6 +114,6 @@ export function validateName(name: string): string | null {
   const n = name.trim();
   if (n.length < NAME_MIN) return `名前は${NAME_MIN}文字以上にしてください`;
   if (n.length > NAME_MAX) return `名前は${NAME_MAX}文字以内にしてください`;
-  if (!/^[\p{L}\p{N}_\-. 　]+$/u.test(n)) return "名前に使えない文字が含まれています";
+  if (/[\u0000-\u001f\u007f]/.test(n)) return "名前に使えない文字が含まれています";
   return null;
 }

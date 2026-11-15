@@ -60,11 +60,19 @@ export default function App() {
           }
         }
       } catch (err) {
-        setError(
-          err instanceof ApiError && err.status === 403
-            ? "ボット判定に失敗しました。ページを再読み込みしてお試しください"
-            : "登録に失敗しました。通信状況を確認してください",
-        );
+        // 原因が分かるようにサーバーのメッセージをそのまま出す
+        console.warn("[register]", err);
+        if (err instanceof ApiError) {
+          if (err.status === 403) {
+            setError("ボット判定に失敗しました。ページを再読み込みしてお試しください");
+          } else if (err.status === 0) {
+            setError("通信できませんでした。電波の良い場所でもう一度お試しください");
+          } else {
+            setError(`${err.message}（${err.status}）`);
+          }
+        } else {
+          setError("登録に失敗しました。もう一度お試しください");
+        }
       } finally {
         setBusy(false);
       }
