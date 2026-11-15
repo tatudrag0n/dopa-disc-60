@@ -3,7 +3,7 @@
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "フライングディスク - ドパ仕様。スマホ/PC両対応のブラウザゲーム＋Cloudflare Workers製ランキング。",
+  "description": "フライングディスク。スマホ/PC両対応のブラウザゲーム＋Cloudflare Workers製ランキング。",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
