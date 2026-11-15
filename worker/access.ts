@@ -30,6 +30,7 @@ let jwksCache: { keys: JsonWebKey[]; at: number } | null = null;
 interface AccessJwtPayload {
   email?: string;
   sub?: string;
+  common_name?: string;
   aud?: string | string[];
   iss?: string;
   exp?: number;
@@ -66,16 +67,25 @@ function decodeSegment(seg: string): AccessJwtPayload {
 }
 
 /**
- * リクエストから Access の身元を取り出す。検証に失敗したら null。
+ * Cloudflare の JWKS は key_ops が空配列・ext が false で返ることがあり、
+ * そのまま importKey すると DataError になる。検証に必要な最小限の
+ * フィールドだけを取り出して作り直す。
  */
-export async function getAccessIdentity(
-  req: Request,
-  env: AccessEnv,
-): Promise<AccessIdentity | null> {
-  if (!accessConfigured(env)) return null;
-  const jwt = req.headers.get("cf-access-jwt-assertion");
-  if (!jwt) return null;
+function toImportableJwk(key: JsonWebKey): JsonWebKey {
+  return {
+    kty: key.kty,
+    n: key.n,
+    e: key.e,
+    alg: key.alg ?? "RS256",
+    ext: true,
+  };
+}
 
+/** Access の JWT を検証し、成功したらペイロードを返す */
+async function verifyJwt(
+  jwt: string,
+  env: AccessEnv,
+): Promise<AccessJwtPayload | null> {
   const parts = jwt.split(".");
   if (parts.length !== 3) return null;
   const [headerSeg, payloadSeg, sigSeg] = parts;
@@ -112,30 +122,47 @@ export async function getAccessIdentity(
   } catch {
     return null;
   }
-  const candidate = header.kid ? keys.find((k) => (k as { kid?: string }).kid === header.kid) : keys[0];
+  const candidate = header.kid
+    ? keys.find((k) => (k as { kid?: string }).kid === header.kid)
+    : keys[0];
   if (!candidate) return null;
 
-  let verified = false;
   try {
     const key = await crypto.subtle.importKey(
       "jwk",
-      candidate,
+      toImportableJwk(candidate),
       { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
       false,
       ["verify"],
     );
-    verified = await crypto.subtle.verify(
+    const ok = await crypto.subtle.verify(
       "RSASSA-PKCS1-v1_5",
       key,
       b64urlToBytes(sigSeg),
       new TextEncoder().encode(`${headerSeg}.${payloadSeg}`),
     );
+    return ok ? payload : null;
   } catch {
     return null;
   }
-  if (!verified) return null;
+}
 
-  const email = payload.email ?? payload.sub;
+/**
+ * リクエストから Access の身元を取り出す。検証に失敗したら null。
+ */
+export async function getAccessIdentity(
+  req: Request,
+  env: AccessEnv,
+): Promise<AccessIdentity | null> {
+  if (!accessConfigured(env)) return null;
+  const jwt = req.headers.get("cf-access-jwt-assertion");
+  if (!jwt) return null;
+
+  const payload = await verifyJwt(jwt, env);
+  if (!payload) return null;
+
+  const email =
+    payload.email?.trim() || payload.sub?.trim() || payload.common_name?.trim() || "";
   if (!email) return null;
   return { email };
 }

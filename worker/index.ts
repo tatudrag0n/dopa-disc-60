@@ -54,6 +54,7 @@ export default {
 async function route(req: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname.replace(/\/+$/, "") || "/api";
 
+
   if (req.method === "GET" && path === "/api/health") {
     return json({ ok: true, access: accessConfigured(env) });
   }

@@ -100,28 +100,53 @@ Actions の `Deploy to Cloudflare` を手動実行してください。
 
 ## Cloudflare Access（Zero Trust）で認証する
 
-内蔵アカウントでも動きますが、**サイト全体を Cloudflare の認証で守る**場合は次の手順です。
-Access は `workers.dev` では使えないため、独自ドメインが必要です。
+**現在このサイトは Cloudflare Access で保護済み**（2026-11-15 設定）。
 
-1. 独自ドメインでの配信は設定済み（`wrangler.jsonc` の `routes`）
-   → `discgame.mct-official.com` で公開中
+| 項目 | 値 |
+| --- | --- |
+| ホスト名 | `discgame.mct-official.com` |
+| チームドメイン | `tatudragon0327.cloudflareaccess.com` |
+| アプリ名 | `dopa-disc-60 (discgame)` |
+| ポリシー | Allow / Include: Everyone（One-time PIN = メール認証） |
+| セッション | 24 時間 |
 
-2. Cloudflare ダッシュボード → **Zero Trust** を初回アクティベート（無料）
-   → **Access → Applications** で `discgame.mct-official.com` を保護し、
-   ポリシー（One-time PIN / Google / GitHub など）を設定
-3. アプリの **Application Audience (AUD) Tag** を控えて secret に登録
+未認証でアクセスすると `tatudragon0327.cloudflareaccess.com` のログイン画面へ 302 で飛び、
+メールに届くワンタイムコードを入力すると入場できる。認証後は `Cf-Access-Jwt-Assertion`
+が付与され、Worker が **JWKS で署名検証**して身元（メールアドレス）を採用する。
 
-   ```bash
-   npx wrangler secret put ACCESS_TEAM_DOMAIN   # 例: myteam.cloudflareaccess.com
-   npx wrangler secret put ACCESS_AUD           # AUD タグ
-   ```
+### 設定をやり直す / 別ドメインに付ける場合
 
-4. 再デプロイ。以降は `Cf-Access-Jwt-Assertion` を **署名検証**して身元を採用し、
-   未認証リクエストはランキング投稿が拒否されます。
+```bash
+# 1. Access アプリ作成（AUD が返る）
+curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps" \
+  -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"dopa-disc-60","domain":"discgame.mct-official.com","type":"self_hosted",
+       "session_duration":"24h","allowed_idps":["<one-time PIN の IdP ID>"],
+       "auto_redirect_to_identity":true}'
 
-`ACCESS_TEAM_DOMAIN` / `ACCESS_AUD` が未設定のときは Access 連携は自動的に無効になり、
-内蔵アカウント認証にフォールバックします（`GET /api/me` の `accessEnabled` で判定可能）。
+# 2. ポリシー（全員許可）
+curl -X POST ".../access/apps/$APP_ID/policies" \
+  -d '{"name":"Allow everyone","decision":"allow","precedence":1,
+       "include":[{"everyone":{}}]}'
 
+# 3. Worker に秘密を登録（設定すると Access 連携が有効になる）
+npx wrangler secret put ACCESS_TEAM_DOMAIN   # tatudragon0327.cloudflareaccess.com
+npx wrangler secret put ACCESS_AUD           # 1 で返った aud
+```
+
+`ACCESS_TEAM_DOMAIN` / `ACCESS_AUD` が未設定なら Access 連携は自動的に無効になり、
+内蔵アカウント認証（PBKDF2 + HttpOnly Cookie）にフォールバックする。
+`GET /api/me` の `accessEnabled` で判定できる。
+
+### ハマりどころ（実際に踏んだもの）
+
+- **API トークンは Access の Edit 権限が必要。** Read だけだとアプリ作成が
+  `403 auth.forbidden`（code 1010）になる。読み取り系だけ通るので気づきにくい。
+- **Cloudflare の JWKS は `key_ops` が空配列で返る。** そのまま
+  `crypto.subtle.importKey("jwk", ...)` に渡すと DataError になり、署名検証が必ず失敗する
+  （`verified: false` になる）。`kty` / `n` / `e` / `alg` だけを取り出して import すること。
+- **サービストークンでテストする場合**、ポリシーの `decision` は `allow` ではなく
+  **`non_identity`** にする必要がある。`allow` だとログイン画面の HTML が 200 で返ってくる。
 ## API
 
 | メソッド | パス | 説明 |
