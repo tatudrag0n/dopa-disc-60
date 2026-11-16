@@ -198,3 +198,29 @@ S ≥ 0.90 / A ≥ 0.78 / B ≥ 0.62 / C ≥ 0.42 / D
 
 保存済みの記録は、そのとき付いたグレードをそのまま表示する。
 旧方式で保存された記録は再現できないためグレードを空にしてあり、空のときは表示しない。
+## 音（BGM / 効果音）
+
+`src/lib/gameAudio.ts` が **WebAudio で手続き的に音を生成**する。音声ファイルは持たない。
+
+- ダウンロードが増えない
+- ループの継ぎ目が完全に無い（シーケンサで刻むため）
+- 回転量などに応じて音を変化させられる
+
+**BGM**: 132 BPM / 16分音符、4小節ループ（Am → F → C → G）。
+キック（4つ打ち）・スネア・ハイハット・ベース・アルペジオ・コード刻みで構成し、
+4小節目の後半にリードを重ねて盛り上げる。`ensure()` → `start()` で開始し、
+`setMuted()` でミュートに追従する。
+
+**SFX**: `click` / `drawStart` / `drawTick` / `shapeDone` / `spinTick` / `throw` /
+`land` / `best` / `bonus` / `grade` の 10 種。それぞれトーンとノイズを重ねて作る。
+`spinTick` は引数で音程が上がる（回転が乗るほど高くなる）。
+
+自動再生ポリシーがあるため、BGM は「スタート」ボタン（ユーザー操作）で開始する。
+
+## SEO
+
+- タイトル / description / keywords / canonical / OGP / Twitter Card / JSON-LD（VideoGame）
+- `public/robots.txt`（`/api/` と `/actions` は除外）、`public/sitemap.xml`
+- JS 無効時のために `<noscript>` で説明と遊び方を出している
+  （常時表示の隠しテキストはクローキング扱いになり得るので使わない）
+- SPA なので、インデックスを早めたい場合は Search Console で sitemap.xml を送信する

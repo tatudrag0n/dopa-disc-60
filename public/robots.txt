@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /actions
+
+Sitemap: https://discgame.mct-official.com/sitemap.xml

@@ -6,24 +6,75 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5"
     />
+    <title>フライングディスク｜1筆で描いて飛ばす無料ブラウザゲーム</title>
+    <meta
+      name="description"
+      content="描いた形がそのままディスクになる無料ブラウザゲーム。ぐるっと回して勢いをつけ、上へスワイプして飛ばそう。飛距離は形状・回転・加速度で決まり、全国ランキングで競えます。スマホもPCもインストール不要、ログインなしで遊べます。"
+    />
+    <meta
+      name="keywords"
+      content="フライングディスク,ブラウザゲーム,無料ゲーム,オンラインゲーム,飛距離,ランキング,スコアアタック,スマホゲーム,カジュアルゲーム,フリスビー"
+    />
+    <link rel="canonical" href="https://discgame.mct-official.com/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="google" content="notranslate" />
+
     <meta name="theme-color" content="#0a7cff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#150826" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
-    <title>フライングディスク</title>
-    <meta
-      name="description"
-      content="1筆で描いたディスクを、回して飛ばす。形 × 回転 × 勢いで飛距離が決まるブラウザゲーム。スマホもPCもそのまま遊べて、世界ランキングに挑戦できます。"
-    />
-    <meta property="og:title" content="フライングディスク" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="フライングディスク" />
+    <meta property="og:title" content="フライングディスク｜1筆で描いて飛ばす無料ブラウザゲーム" />
     <meta
       property="og:description"
-      content="描いて、回して、飛ばす。形×回転×勢いで決まる飛距離を世界ランキングで競おう。"
+      content="描いた形がそのままディスクになる。回して飛ばして、飛距離を全国ランキングで競おう。スマホもPCもインストール不要。"
     />
-    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://discgame.mct-official.com/" />
+    <meta property="og:image" content="https://discgame.mct-official.com/icon-512.png" />
+    <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="フライングディスク｜無料ブラウザゲーム" />
+    <meta
+      name="twitter:description"
+      content="描いて、回して、飛ばす。飛距離を全国ランキングで競おう。"
+    />
+    <meta name="twitter:image" content="https://discgame.mct-official.com/icon-512.png" />
+
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- 構造化データ（検索結果での見え方） -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "フライングディスク",
+        "alternateName": "フライングディスク - ブラウザゲーム",
+        "url": "https://discgame.mct-official.com/",
+        "description": "1筆で描いた形がそのままディスクになるブラウザゲーム。回して勢いをつけ、上へスワイプして飛ばす。飛距離をランキングで競えます。",
+        "genre": ["カジュアルゲーム", "スコアアタック"],
+        "gamePlatform": ["Webブラウザ", "スマートフォン", "PC"],
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Web",
+        "inLanguage": "ja",
+        "isAccessibleForFree": true,
+        "playMode": "SinglePlayer",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "JPY",
+          "availability": "https://schema.org/InStock"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "フライングディスク",
+          "url": "https://discgame.mct-official.com/"
+        }
+      }
+    </script>
+
     <style>
       /* JS 読み込み前のちらつき防止（テーマ色を先に確定させる） */
       html {
@@ -54,6 +105,18 @@
         letter-spacing: 0.1em;
         opacity: 0.55;
       }
+      /* JS が無効なときの案内 */
+      noscript {
+        display: block;
+        max-width: 42rem;
+        margin: 0 auto;
+        padding: 2rem 1.25rem;
+        font-family: system-ui, sans-serif;
+        line-height: 1.9;
+      }
+      noscript h1 { font-size: 1.4rem; margin-bottom: 0.75rem; }
+      noscript h2 { font-size: 1.05rem; margin: 1.25rem 0 0.5rem; }
+      noscript ol { padding-left: 1.25rem; }
     </style>
     <script>
       // テーマは描画前に確定（FOUC 対策）
@@ -65,6 +128,20 @@
   </head>
   <body>
     <div id="boot">LOADING…</div>
+    <noscript>
+      <h1>フライングディスク - 1筆で描いて飛ばす無料ブラウザゲーム</h1>
+      <p>
+        描いた形がそのままディスクになる無料のブラウザゲームです。指やマウスで1筆の円を描き、ディスクを回して勢いをつけ、上へスワイプすると飛びます。飛距離は「形状 × 回転
+        × 加速度」で決まり、全国ランキングでほかのプレイヤーと競えます。スマートフォン（iPhone /
+        Android）でもパソコンでもインストール不要、ログインなしでそのまま遊べます。
+      </p>
+      <h2>あそびかた</h2>
+      <ol>
+        <li>1筆で円盤の形を描きます。円に近いほど高評価になります。</li>
+        <li>円盤のまわりを回して回転と勢いをためます。</li>
+        <li>勢いが抜ける前に上へスワイプすると発射されます。</li>
+      </ol>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

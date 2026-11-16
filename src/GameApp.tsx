@@ -3,6 +3,7 @@ import { Volume2, VolumeX, Trophy, RotateCcw, Home, ArrowRight, RotateCw, Sparkl
 import { rankLabel, tr, useI18n } from './lib/i18n';
 import { analyzeDisc, minimumEnclosingCircle } from './lib/discPhysics';
 import { normalizeSpin, overallGrade, shapeGrade } from './lib/grading';
+import { gameAudio, type SfxName } from './lib/gameAudio';
 
 type Screen = 'start' | 'playing' | 'result';
 type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string };
@@ -233,13 +234,9 @@ export default function App() {
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + dur + 0.02);
   }, [ensureAudio]);
-  const sfx = useCallback((name: 'throw' | 'land' | 'best' | 'click' | 'bonus') => {
-    if (name === 'throw') { tone(280, 980, 0.22, 'sine', 0.05); tone(520, 1250, 0.16, 'sine', 0.028, 0.02); tone(180, 420, 0.14, 'sine', 0.02, 0.01); }
-    if (name === 'land') { tone(210, 82, 0.22, 'sine', 0.065); tone(520, 380, 0.14, 'sine', 0.025, 0.02); }
-    if (name === 'best') { [659, 784, 1046, 1318, 1568].forEach((f, i) => tone(f, f * 1.06, 0.3, 'sine', 0.038, i * 0.07)); tone(220, 110, 0.2, 'sine', 0.02); }
-    if (name === 'click') { tone(620, 760, 0.08, 'sine', 0.035); }
-    if (name === 'bonus') { tone(740, 980, 0.16, 'sine', 0.04); tone(980, 1240, 0.16, 'sine', 0.035, 0.07); }
-  }, [tone]);
+  const sfx = useCallback((name: SfxName, param = 0) => {
+    gameAudio.sfx(name, param);
+  }, []);
 
   const loadScores = useCallback(async () => {
     try {
@@ -299,7 +296,7 @@ export default function App() {
     if (len < 60) { strokeRef.current.pts = []; setDrawHint(tr('drawSmall')); return; }
     const analyzed = analyzeShape(pts);
     shapeRef.current = { points: analyzed.points, balance: analyzed.balance, grade: analyzed.grade, drawnRadius: analyzed.drawnRadius, bboxW: analyzed.bboxW, bboxH: analyzed.bboxH, physics: analyzed.physics };
-    setShapeBalance(analyzed.balance); setShapeGrade(analyzed.grade); setShapeSize(Math.round(analyzed.drawnRadius * 2)); setShapeLocked(true); setDrawHint('');
+    setShapeBalance(analyzed.balance); setShapeGrade(analyzed.grade); setShapeSize(Math.round(analyzed.drawnRadius * 2)); setShapeLocked(true); gameAudio.sfx('shapeDone'); setDrawHint('');
     sfx('bonus');
     try { navigator.vibrate?.(12); } catch {}
   }, [sfx]);
@@ -341,7 +338,7 @@ export default function App() {
   }, [screen, phase]);
 
   const startGame = useCallback(() => {
-    ensureAudio(); sfx('click');
+    ensureAudio(); gameAudio.start(); sfx('click');
     runIdRef.current = Date.now();
     landedAtRef.current = 0; landedXRef.current = 0;
     const w = randomWind(); windRef.current = w;
@@ -1155,7 +1152,7 @@ export default function App() {
       aimRef.current.active = false;
     }
   };
-  const toggleMute = () => { const next = !muted; setMuted(next); audioRef.current.muted = next; if (!next) { ensureAudio(); tone(660, 840, 0.14, 'sine', 0.04); } };
+  const toggleMute = () => { const next = !muted; setMuted(next); audioRef.current.muted = next; gameAudio.setMuted(next); if (!next) gameAudio.start(); if (!next) { ensureAudio(); tone(660, 840, 0.14, 'sine', 0.04); } };
 
   const bestTotalDisplay = highScores.length ? (highScores[0].total ?? highScores[0].best) : 0;
   const bestDistDisplay = highScores.length ? highScores[0].best : 0;
