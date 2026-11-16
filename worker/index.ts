@@ -9,7 +9,7 @@ import {
 import { handleActions, type ActionsEnv } from "./actions";
 import { turnstileEnabled, verifyTurnstile, type TurnstileEnv } from "./turnstile";
 import type { ConfigResponse, MeResponse } from "../src/shared/types";
-import { clientKey, fail, json, readJson } from "./util";
+import { clientKey, fail, json, randomToken, readJson } from "./util";
 
 export interface Env extends ActionsEnv, TurnstileEnv {
   ASSETS: Fetcher;
@@ -63,6 +63,22 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     const identity = await getIdentity(env, req);
     const payload: MeResponse = { user: identity ? { name: identity.name } : null };
     return json(payload);
+  }
+
+  // プレイ前に毎回発行する「プレイ券」。スコア投稿時にこれが無いと受け付けない。
+  if (req.method === "POST" && path === "/api/play-ticket") {
+    const body = (await readJson<Record<string, unknown>>(req)) ?? {};
+    const token = typeof body.turnstileToken === "string" ? body.turnstileToken : undefined;
+    if (!(await verifyTurnstile(env, token, clientKey(req)))) {
+      return fail("確認に失敗しました。もう一度お試しください", 403);
+    }
+    const ticket = randomToken(24);
+    await env.DOPA_KV.put(
+      `ticket:${ticket}`,
+      JSON.stringify({ exp: Date.now() + 180_000 }),
+      { expirationTtl: 180 },
+    );
+    return json({ data: { ticket } });
   }
 
   if (req.method === "POST" && path === "/actions") {

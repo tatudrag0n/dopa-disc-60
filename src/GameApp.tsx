@@ -4,6 +4,7 @@ import { rankLabel, tr, useI18n } from './lib/i18n';
 import { analyzeDisc, minimumEnclosingCircle } from './lib/discPhysics';
 import { normalizeSpin, overallGrade, shapeGrade } from './lib/grading';
 import { gameAudio, type SfxName } from './lib/gameAudio';
+import { requestPlayTicket, takePlayTicket } from './lib/playGate';
 
 type Screen = 'start' | 'playing' | 'result';
 type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string };
@@ -337,7 +338,10 @@ export default function App() {
     return () => window.clearInterval(id);
   }, [screen, phase]);
 
-  const startGame = useCallback(() => {
+  const startGame = useCallback(async () => {
+    // プレイ前に毎回ロボット確認（Turnstile）を通す
+    const allowed = await requestPlayTicket();
+    if (!allowed) return;
     ensureAudio(); gameAudio.start(); sfx('click');
     runIdRef.current = Date.now();
     landedAtRef.current = 0; landedXRef.current = 0;
@@ -387,7 +391,7 @@ export default function App() {
     try {
       if (finalTotal > 0) {
         const key = `distance-${runIdRef.current}-${finalTotal}`;
-        await callApi('records.create', { collection: 'flying_disc_distance_scores', value: { best: finalBest, total: finalTotal, rank: overall, playedAt: new Date().toISOString() }, idempotency_key: key });
+        await callApi('records.create', { collection: 'flying_disc_distance_scores', value: { best: finalBest, total: finalTotal, rank: overall, playedAt: new Date().toISOString() }, idempotency_key: key, play_ticket: takePlayTicket() });
         await loadScores();
       }
     } catch { setApiNote(tr('savePending')); }

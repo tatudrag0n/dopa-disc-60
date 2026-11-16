@@ -1,8 +1,10 @@
 import { getIdentity, type AuthEnv, type Identity } from "./auth";
 import { json } from "./util";
+import { turnstileEnabled } from "./turnstile";
 
 export interface ActionsEnv extends AuthEnv {
   DB: D1Database;
+  TURNSTILE_SECRET?: string;
 }
 
 /** 返すランキング件数（ゲーム側は TOP 5 を表示する） */
@@ -76,6 +78,17 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
     const best = Number(value.best);
     const total = Number(value.total);
     const grade = typeof value.rank === "string" ? value.rank.slice(0, 4) : "D";
+
+    // プレイ券（Turnstile の確認を通った証拠）を検証して消費する
+    if (turnstileEnabled(env)) {
+      const ticket = typeof args.play_ticket === "string" ? args.play_ticket : "";
+      if (!ticket) return json({ error: "プレイ前の確認が必要です" }, 403);
+      const saved = (await env.DOPA_KV.get(`ticket:${ticket}`, "json")) as { exp: number } | null;
+      if (!saved || saved.exp < Date.now()) {
+        return json({ error: "確認の有効期限が切れました。もう一度スタートしてください" }, 403);
+      }
+      await env.DOPA_KV.delete(`ticket:${ticket}`);
+    }
 
     if (!Number.isFinite(best) || !Number.isFinite(total)) {
       return json({ error: "スコアの形式が不正です" }, 400);

@@ -56,7 +56,11 @@ interface Pending {
 
 const EXECUTE_TIMEOUT_MS = 25_000;
 
-export function useTurnstile(siteKey: string | null, language: string) {
+export function useTurnstile(
+  siteKey: string | null,
+  language: string,
+  opts: { visible?: boolean } = {},
+) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetId = useRef<string | null>(null);
   const pending = useRef<Pending | null>(null);
@@ -80,7 +84,7 @@ export function useTurnstile(siteKey: string | null, language: string) {
         widgetId.current = api.render(el, {
           sitekey: siteKey,
           execution: "execute",
-          appearance: "interaction-only",
+          appearance: opts.visible ? "always" : "interaction-only",
           size: "flexible",
           theme: "auto",
           language,
@@ -112,11 +116,23 @@ export function useTurnstile(siteKey: string | null, language: string) {
   }, [siteKey, language]);
 
   /** トークンを取得する。サイトキーが無ければ空文字。 */
-  const execute = useCallback((): Promise<string> => {
-    if (!siteKey) return Promise.resolve("");
+  /** ウィジェットの描画完了を待つ（モーダルを開いた直後はまだ無いことがある） */
+  const waitForWidget = useCallback(async (timeoutMs = 8000): Promise<string | null> => {
+    const started = Date.now();
+    while (!widgetId.current) {
+      if (Date.now() - started > timeoutMs) return null;
+      if (!siteKey) return "";
+      await new Promise((r) => window.setTimeout(r, 100));
+    }
+    return widgetId.current;
+  }, [siteKey]);
+
+  const execute = useCallback(async (): Promise<string> => {
+    if (!siteKey) return "";
+    const id = await waitForWidget();
+    if (id === null) throw new Error("turnstile-not-ready");
     const api = window.turnstile;
-    const id = widgetId.current;
-    if (!api || !id) return Promise.reject(new Error("turnstile-not-ready"));
+    if (!api) throw new Error("turnstile-not-ready");
 
     // 前回の使い捨てトークンを破棄してから実行する
     try {

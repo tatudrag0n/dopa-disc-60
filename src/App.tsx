@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import GameApp from "./GameApp";
+import { PlayGate } from "./components/PlayGate";
+import { registerPlayTokenProvider } from "./lib/playGate";
 import { ApiError, claimName, fetchConfig, fetchMe } from "./lib/session";
 import { tr, useI18n } from "./lib/i18n";
 import { useTurnstile } from "./lib/turnstile";
@@ -20,6 +22,33 @@ export default function App() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // プレイ前確認（Turnstile）
+  const [gateOpen, setGateOpen] = useState(false);
+  const gateResolve = useRef<((token: string) => void) | null>(null);
+  const gateReject = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    registerPlayTokenProvider(
+      () =>
+        new Promise<string>((resolve, reject) => {
+          gateResolve.current = resolve;
+          gateReject.current = reject;
+          setGateOpen(true);
+        }),
+    );
+    return () => registerPlayTokenProvider(null);
+  }, []);
+
+  const finishGate = (ok: boolean, token = "") => {
+    setGateOpen(false);
+    const ok$ = gateResolve.current;
+    const ng$ = gateReject.current;
+    gateResolve.current = null;
+    gateReject.current = null;
+    if (ok) ok$?.(token);
+    else ng$?.();
+  };
 
   const turnstile = useTurnstile(siteKey, lang);
 
@@ -82,6 +111,14 @@ export default function App() {
   return (
     <>
       <GameApp />
+
+      <PlayGate
+        open={gateOpen}
+        siteKey={siteKey}
+        lang={lang}
+        onDone={(token) => finishGate(true, token)}
+        onFail={() => finishGate(false)}
+      />
 
       {/* 言語切替 */}
       <button
