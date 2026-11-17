@@ -132,6 +132,7 @@ const DICT = {
     "We check before every play. Tick the box to start.",
   ],
   "playGate.bot": ["Cloudflare Turnstile で保護されています", "Protected by Cloudflare Turnstile"],
+  "playGate.retry": ["もう一度", "Try again"],
   "playGate.fail": [
     "確認できませんでした。広告ブロッカーを切るか、再読み込みしてお試しください",
     "Check failed. Turn off any ad blocker or reload and try again.",
