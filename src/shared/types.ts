@@ -54,11 +54,6 @@ export interface MeResponse {
   user: { name: string } | null;
 }
 
-export interface ConfigResponse {
-  /** Turnstile のサイトキー。null ならボット判定は無効。 */
-  turnstileSiteKey: string | null;
-}
-
 export interface SubmitResponse {
   entry: ScoreEntry;
   rank: number;

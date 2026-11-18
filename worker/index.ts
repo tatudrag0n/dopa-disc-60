@@ -7,14 +7,11 @@ import {
   renameIdentity,
 } from "./auth";
 import { handleActions, type ActionsEnv } from "./actions";
-import { turnstileEnabled, verifyTurnstile, type TurnstileEnv } from "./turnstile";
-import type { ConfigResponse, MeResponse } from "../src/shared/types";
-import { clientKey, fail, json, randomToken, readJson } from "./util";
+import type { MeResponse } from "../src/shared/types";
+import { fail, json, readJson } from "./util";
 
-export interface Env extends ActionsEnv, TurnstileEnv {
+export interface Env extends ActionsEnv {
   ASSETS: Fetcher;
-  /** Turnstile のサイトキー（公開情報） */
-  TURNSTILE_SITEKEY?: string;
 }
 
 export default {
@@ -49,36 +46,13 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname.replace(/\/+$/, "") || "/";
 
   if (req.method === "GET" && path === "/api/health") {
-    return json({ ok: true, turnstile: turnstileEnabled(env) });
-  }
-
-  if (req.method === "GET" && path === "/api/config") {
-    const payload: ConfigResponse = {
-      turnstileSiteKey: turnstileEnabled(env) ? (env.TURNSTILE_SITEKEY ?? null) : null,
-    };
-    return json(payload);
+    return json({ ok: true });
   }
 
   if (req.method === "GET" && path === "/api/me") {
     const identity = await getIdentity(env, req);
     const payload: MeResponse = { user: identity ? { name: identity.name } : null };
     return json(payload);
-  }
-
-  // プレイ前に毎回発行する「プレイ券」。スコア投稿時にこれが無いと受け付けない。
-  if (req.method === "POST" && path === "/api/play-ticket") {
-    const body = (await readJson<Record<string, unknown>>(req)) ?? {};
-    const token = typeof body.turnstileToken === "string" ? body.turnstileToken : undefined;
-    if (!(await verifyTurnstile(env, token, clientKey(req)))) {
-      return fail("確認に失敗しました。もう一度お試しください", 403);
-    }
-    const ticket = randomToken(24);
-    await env.DOPA_KV.put(
-      `ticket:${ticket}`,
-      JSON.stringify({ exp: Date.now() + 180_000 }),
-      { expirationTtl: 180 },
-    );
-    return json({ data: { ticket } });
   }
 
   if (req.method === "POST" && path === "/actions") {
@@ -89,12 +63,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (req.method === "POST" && path === "/api/me/name") {
     const body = (await readJson<Record<string, unknown>>(req)) ?? {};
 
-    // ?create=1 は「新規に名前を登録する」。ここでだけボット判定を行う。
     if (url.searchParams.get("create") === "1") {
-      const token = typeof body.turnstileToken === "string" ? body.turnstileToken : undefined;
-      if (!(await verifyTurnstile(env, token, clientKey(req)))) {
-        return fail("ボット判定に失敗しました。ページを再読み込みしてお試しください", 403);
-      }
       const created = await createIdentity(env, typeof body.name === "string" ? body.name : "");
       if (!created.ok) return fail(created.message, 400);
       return json({ user: { name: created.identity.name } }, 200, cookieHeader(req, created.cookie));

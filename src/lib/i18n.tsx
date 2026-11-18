@@ -125,18 +125,6 @@ const DICT = {
   "shapeWeak.area": ["面積が足りない", "Too little area"],
   "shapeWeak.balance": ["重心が偏る", "Off-centre mass"],
   "shapeWeak.none": ["まとまった形", "Well-formed"],
-  "playGate.badge": ["HUMAN CHECK", "HUMAN CHECK"],
-  "playGate.title": ["ロボット確認", "Quick check"],
-  "playGate.desc": [
-    "プレイのたびに確認します。チェックを入れるとスタートできます。",
-    "We check before every play. Tick the box to start.",
-  ],
-  "playGate.bot": ["Cloudflare Turnstile で保護されています", "Protected by Cloudflare Turnstile"],
-  "playGate.retry": ["もう一度", "Try again"],
-  "playGate.fail": [
-    "確認できませんでした。広告ブロッカーを切るか、再読み込みしてお試しください",
-    "Check failed. Turn off any ad blocker or reload and try again.",
-  ],
   "rankShort": ["ランク", "Rank"],
   "rankingTitle": ["ランキング", "Ranking"],
   "close": ["閉じる", "Close"],
@@ -148,12 +136,7 @@ const DICT = {
   "gate.placeholder": ["2〜16文字", "2-16 characters"],
   "gate.start": ["この名前ではじめる", "Start with this name"],
   "gate.checking": ["確認中…", "Checking…"],
-  "gate.bot": ["ボット判定: Cloudflare Turnstile", "Bot check: Cloudflare Turnstile"],
   "gate.errShort": ["名前は2文字以上にしてください", "Use at least 2 characters"],
-  "gate.errBot": [
-    "ボット判定に失敗しました。ページを再読み込みしてお試しください",
-    "The bot check failed. Please reload the page.",
-  ],
   "gate.errNet": [
     "通信できませんでした。電波の良い場所でもう一度お試しください",
     "Could not connect. Please try again.",

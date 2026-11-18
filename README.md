@@ -2,7 +2,7 @@
 
 描いた形がそのままディスクになる。形状 × 回転 × 加速度で飛距離が決まるブラウザゲーム。
 ゲーム本体は **`Dopa+Disc+60+Ok.tar.gz` の `App.tsx` をそのまま使用**しており、
-このリポジトリは「配信」と「ランキング／ボット判定」だけを担当する。
+このリポジトリは「配信」と「ランキング」だけを担当する。
 
 - 本番: <https://discgame.mct-official.com>
 - リポジトリ: <https://github.com/tatudrag0n/dopa-disc-60>
@@ -16,20 +16,18 @@ src/
   GameApp.tsx            ゲーム本体（オリジナル実装をほぼそのまま）
   index.css              ゲームの見た目（オリジナル）
   lib/session.ts         名前の登録・取得
-  lib/turnstile.ts       Turnstile ウィジェット
   shared/types.ts        共通の型
 worker/
   index.ts               ルーター（/api/*, /actions）
   actions.ts             ランキングの読み書き（D1）
   auth.ts                名前だけのセッション（Cookie + KV）
-  turnstile.ts           ボット判定
   util.ts                Cookie・KV ユーティリティ
 migrations/
   0002_runs.sql          ランキングのスキーマ
 ```
 
 - フロント: Vite + React 18 + TypeScript + Tailwind CSS 3
-- バックエンド: Cloudflare Workers（Static Assets + D1 + KV + Turnstile）
+- バックエンド: Cloudflare Workers（Static Assets + D1 + KV）
 
 ## ゲーム本体をどう載せているか
 
@@ -51,12 +49,11 @@ migrations/
 保存先は D1 の `runs` テーブル（1 ユーザー 1 行、`total` が更新されたときだけ書き換え）。
 セッション Cookie が無い投稿は 401、1 分 20 回を超える投稿は 429 で拒否する。
 
-## 名前とボット判定
+## 名前の登録
 
 - パスワードもメールも無し。初回に**名前を決めるだけ**で、`dopa_sess` Cookie（30日）が発行される
-- 名前の登録時だけ **Cloudflare Turnstile** を検証する
-  （`TURNSTILE_SECRET` 未設定ならスキップ）
 - 以降のスコア投稿はセッションで認証される
+- パスワード・ログインなし。名前だけの名札（Cookie 30日）で認証する
 
 ## ローカル開発
 
