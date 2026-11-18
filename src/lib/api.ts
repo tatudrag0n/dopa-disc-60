@@ -1,5 +1,4 @@
 import type {
-  ConfigResponse,
   LeaderboardResponse,
   MeResponse,
   ScoreRange,
@@ -45,10 +44,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export function fetchConfig(): Promise<ConfigResponse> {
-  return request<ConfigResponse>("/api/config");
-}
-
 export function fetchMe(): Promise<MeResponse> {
   return request<MeResponse>("/api/me");
 }
@@ -63,8 +58,6 @@ export interface SubmitPayload {
   mom: number;
   /** 未登録のプレイヤーが最初の1回だけ送る */
   name?: string;
-  /** Turnstile のトークン */
-  turnstileToken?: string;
 }
 
 export function submitScore(payload: SubmitPayload): Promise<SubmitResponse> {

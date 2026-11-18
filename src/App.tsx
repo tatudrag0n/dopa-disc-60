@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import GameApp from "./GameApp";
-import { PlayGate } from "./components/PlayGate";
-import { registerPlayTokenProvider } from "./lib/playGate";
-import { ApiError, claimName, fetchConfig, fetchMe } from "./lib/session";
+import { ApiError, claimName, fetchMe } from "./lib/session";
 import { tr, useI18n } from "./lib/i18n";
-import { useTurnstile } from "./lib/turnstile";
 import { NAME_MAX } from "./shared/types";
 
 /**
  * ゲーム本体は GameApp（オリジナル実装をほぼそのまま使用）。
- * ここでは「名前を決める + ボット判定」と「言語切替」だけを載せる。
+ * ここでは「名前を決める」と「言語切替」だけを載せる。
  * ランキングはゲーム本体のスタート画面（旧スコア TOP 5 の場所）に常時表示している。
  */
 export default function App() {
@@ -18,39 +15,9 @@ export default function App() {
 
   const [checked, setChecked] = useState(false);
   const [user, setUser] = useState<{ name: string } | null>(null);
-  const [siteKey, setSiteKey] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // プレイ前確認（Turnstile）
-  const [gateOpen, setGateOpen] = useState(false);
-  const gateResolve = useRef<((token: string) => void) | null>(null);
-  const gateReject = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    registerPlayTokenProvider(
-      () =>
-        new Promise<string>((resolve, reject) => {
-          gateResolve.current = resolve;
-          gateReject.current = reject;
-          setGateOpen(true);
-        }),
-    );
-    return () => registerPlayTokenProvider(null);
-  }, []);
-
-  const finishGate = (ok: boolean, token = "") => {
-    setGateOpen(false);
-    const ok$ = gateResolve.current;
-    const ng$ = gateReject.current;
-    gateResolve.current = null;
-    gateReject.current = null;
-    if (ok) ok$?.(token);
-    else ng$?.();
-  };
-
-  const turnstile = useTurnstile(siteKey, lang);
 
   // ゲーム側が「自分の行」をハイライトできるように名前を渡す
   useEffect(() => {
@@ -59,12 +26,8 @@ export default function App() {
 
   useEffect(() => {
     void (async () => {
-      const [me, cfg] = await Promise.all([
-        fetchMe().catch(() => null),
-        fetchConfig().catch(() => null),
-      ]);
+      const me = await fetchMe().catch(() => null);
       if (me?.user) setUser(me.user);
-      setSiteKey(cfg?.turnstileSiteKey ?? null);
       setChecked(true);
     })();
   }, []);
@@ -81,22 +44,13 @@ export default function App() {
       setBusy(true);
       setError(null);
       try {
-        let token = "";
-        try {
-          token = await turnstile.execute();
-        } catch {
-          setError(tr("gate.errBot"));
-          setBusy(false);
-          return;
-        }
-        const res = await claimName(trimmed, token);
+        const res = await claimName(trimmed);
         if (res.user) setUser(res.user);
         else setError(tr("gate.errOther"));
       } catch (err) {
         console.warn("[register]", err);
         if (err instanceof ApiError) {
-          if (err.status === 403) setError(tr("gate.errBot"));
-          else if (err.status === 0) setError(tr("gate.errNet"));
+          if (err.status === 0) setError(tr("gate.errNet"));
           else setError(`${err.message}（${err.status}）`);
         } else {
           setError(tr("gate.errOther"));
@@ -105,20 +59,12 @@ export default function App() {
         setBusy(false);
       }
     },
-    [busy, name, turnstile],
+    [busy, name],
   );
 
   return (
     <>
       <GameApp />
-
-      <PlayGate
-        open={gateOpen}
-        siteKey={siteKey}
-        lang={lang}
-        onDone={(token) => finishGate(true, token)}
-        onFail={() => finishGate(false)}
-      />
 
       {/* 言語切替 */}
       <button
@@ -184,12 +130,6 @@ export default function App() {
             >
               {busy ? tr("gate.checking") : tr("gate.start")}
             </button>
-
-            <p className="mt-3 text-center text-[10px] font-bold text-[var(--muted)]">
-              {tr("gate.bot")}
-            </p>
-
-            <div ref={turnstile.containerRef} className="mt-1 flex justify-center" />
           </form>
         </div>
       )}

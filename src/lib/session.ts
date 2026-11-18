@@ -1,4 +1,4 @@
-import type { ConfigResponse, MeResponse } from "../shared/types";
+import type { MeResponse } from "../shared/types";
 
 export class ApiError extends Error {
   status: number;
@@ -38,19 +38,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export function fetchConfig(): Promise<ConfigResponse> {
-  return request<ConfigResponse>("/api/config");
-}
-
 export function fetchMe(): Promise<MeResponse> {
   return request<MeResponse>("/api/me");
 }
 
-/** 名前を登録してセッションを作る（Turnstile のトークンが必要） */
-export function claimName(name: string, turnstileToken: string): Promise<MeResponse> {
+/** 名前を登録してセッションを作る */
+export function claimName(name: string): Promise<MeResponse> {
   return request<MeResponse>("/api/me/name?create=1", {
     method: "POST",
-    body: JSON.stringify({ name, turnstileToken }),
+    body: JSON.stringify({ name }),
   });
 }
 
