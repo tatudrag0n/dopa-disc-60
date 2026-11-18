@@ -1,50 +1,27 @@
 /**
- * Cloudflare Turnstile（ボット判定）。
+ * Cloudflare Turnstile（ボット判定）— 現在は無効化している。
  *
- * TURNSTILE_SECRET が未設定ならチェックをスキップする（ローカル開発用）。
- * ログインは行わず、「人間かどうか」だけをここで確認する。
+ * ゲームにボット判定は不要なので、常に「無効」として扱う。
+ * - turnstileEnabled() は常に false
+ *   → /api/config が siteKey=null を返し、フロント側はウィジェットを出さず空トークンで進む
+ * - verifyTurnstile() は常に true
+ *
+ * 再び有効にしたい場合は、元の実装（git履歴）に戻し、
+ * `npx wrangler secret put TURNSTILE_SECRET` でシークレットを登録する。
  */
 
 export interface TurnstileEnv {
   TURNSTILE_SECRET?: string;
 }
 
-interface SiteVerifyResponse {
-  success: boolean;
-  "error-codes"?: string[];
-  challenge_ts?: string;
-  hostname?: string;
+export function turnstileEnabled(_env: TurnstileEnv): boolean {
+  return false;
 }
 
-const VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-
-export function turnstileEnabled(env: TurnstileEnv): boolean {
-  return Boolean(env.TURNSTILE_SECRET);
-}
-
-/**
- * トークンを検証する。設定が無ければ常に true。
- * ネットワーク障害時は false（安全側）に倒す。
- */
 export async function verifyTurnstile(
-  env: TurnstileEnv,
-  token: string | undefined,
-  remoteIp?: string,
+  _env: TurnstileEnv,
+  _token: string | undefined,
+  _remoteIp?: string,
 ): Promise<boolean> {
-  if (!turnstileEnabled(env)) return true;
-  if (!token || typeof token !== "string" || token.length > 4096) return false;
-
-  const form = new FormData();
-  form.append("secret", env.TURNSTILE_SECRET as string);
-  form.append("response", token);
-  if (remoteIp) form.append("remoteip", remoteIp);
-
-  try {
-    const res = await fetch(VERIFY_URL, { method: "POST", body: form });
-    if (!res.ok) return false;
-    const data = (await res.json()) as SiteVerifyResponse;
-    return data.success === true;
-  } catch {
-    return false;
-  }
+  return true;
 }
