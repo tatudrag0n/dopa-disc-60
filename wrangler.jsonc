@@ -27,14 +27,13 @@
   "routes": [
     { "pattern": "discgame.mct-official.com", "custom_domain": true }
   ],
-  "vars": {
-    "TURNSTILE_SITEKEY": "0x4AAAAAAGBXWPageelNvI8R"
-  },
+  "vars": {},
   "observability": {
     "enabled": true
   }
 
-  // ボット判定（Cloudflare Turnstile）のシークレットは secret で登録する。
+  // ボット判定（Cloudflare Turnstile）は無効化している（worker/turnstile.ts 参照）。
+  // 再度有効にする場合は TURNSTILE_SITEKEY をここに戻し、
   //   npx wrangler secret put TURNSTILE_SECRET
-  // 未設定のあいだはボット判定をスキップする（ローカル開発用）。
+  // でシークレットを登録する。
 }
