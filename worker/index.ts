@@ -104,6 +104,10 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     if (!identity) return fail("セッションがありません", 401);
     const result = await renameIdentity(env, req, typeof body.name === "string" ? body.name : "");
     if (!result.ok) return fail(result.message, 400);
+    // ランキングに載っている名前も、新しい名前にそろえる
+    await env.DB.prepare("UPDATE runs SET name = ? WHERE uid = ?")
+      .bind(result.identity.name, result.identity.uid)
+      .run();
     return json({ user: { name: result.identity.name } });
   }
 
