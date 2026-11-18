@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import GameApp from "./GameApp";
 import { PlayGate } from "./components/PlayGate";
 import { registerPlayTokenProvider } from "./lib/playGate";
-import { ApiError, claimName, fetchConfig, fetchMe } from "./lib/session";
+import { ApiError, claimName, fetchConfig, fetchMe, renamePlayer } from "./lib/session";
 import { tr, useI18n } from "./lib/i18n";
 import { useTurnstile } from "./lib/turnstile";
 import { NAME_MAX } from "./shared/types";
 
 /**
  * ゲーム本体は GameApp（オリジナル実装をほぼそのまま使用）。
- * ここでは「名前を決める + ボット判定」と「言語切替」だけを載せる。
+ * ここでは「名前を決める + ボット判定」と「名前の変更」「言語切替」だけを載せる。
  * ランキングはゲーム本体のスタート画面（旧スコア TOP 5 の場所）に常時表示している。
  */
 export default function App() {
@@ -22,6 +22,12 @@ export default function App() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 名前変更
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   // プレイ前確認（Turnstile）
   const [gateOpen, setGateOpen] = useState(false);
@@ -108,6 +114,35 @@ export default function App() {
     [busy, name, turnstile],
   );
 
+  const openRename = () => {
+    setRenameValue(user?.name ?? "");
+    setRenameError(null);
+    setRenameOpen(true);
+  };
+
+  const submitRename = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (renameBusy) return;
+    const trimmed = renameValue.trim();
+    if (trimmed.length < 2) {
+      setRenameError("2文字以上で入力してください");
+      return;
+    }
+    setRenameBusy(true);
+    setRenameError(null);
+    try {
+      const res = await renamePlayer(trimmed);
+      if (res.user) {
+        setUser(res.user);
+        setRenameOpen(false);
+      }
+    } catch (err) {
+      setRenameError(err instanceof ApiError ? err.message : "変更できませんでした");
+    } finally {
+      setRenameBusy(false);
+    }
+  };
+
   return (
     <>
       <GameApp />
@@ -130,6 +165,71 @@ export default function App() {
       >
         {lang === "ja" ? "EN" : "JA"}
       </button>
+
+      {/* 名前変更（ログイン後のみ） */}
+      {checked && user && (
+        <button
+          type="button"
+          onClick={openRename}
+          className="fixed left-2 z-[60] rounded-full border-2 border-[var(--line)] bg-[var(--surface)]/95 px-2.5 py-1.5 text-[11px] font-black text-[var(--ink)] shadow-md backdrop-blur"
+          style={{ bottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+        >
+          名前変更
+        </button>
+      )}
+
+      {renameOpen && user && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-[#14103a]/55 p-4 backdrop-blur-sm">
+          <form
+            onSubmit={submitRename}
+            className="w-full max-w-sm rounded-3xl border-2 border-[var(--line)] bg-[var(--surface)] p-5 shadow-xl"
+          >
+            <p className="text-[11px] font-black tracking-[0.2em] text-[var(--accent)]">
+              CHANGE NAME
+            </p>
+            <h2 className="mt-1 text-center text-xl font-black text-[var(--ink)]">名前を変更</h2>
+            <p className="mt-2 text-center text-xs font-bold leading-relaxed text-[var(--muted)]">
+              ランキングに表示される名前を変えます。
+            </p>
+
+            <input
+              value={renameValue}
+              onChange={(e) => {
+                setRenameValue(e.target.value);
+                setRenameError(null);
+              }}
+              maxLength={NAME_MAX}
+              autoFocus
+              aria-label="新しい名前"
+              placeholder="新しい名前"
+              className="mt-4 w-full rounded-xl border-2 border-[var(--line)] bg-[var(--bg)] px-3 py-3 text-center text-base font-black text-[var(--ink)] outline-none"
+            />
+
+            <div aria-live="polite" className="mt-2 min-h-[18px]">
+              {renameError && (
+                <p className="rounded-lg bg-[var(--accent)] px-2 py-1.5 text-center text-[11px] font-black text-white">
+                  {renameError}
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={renameBusy}
+              className="mt-2 w-full rounded-xl bg-[var(--accent)] py-3.5 text-base font-black text-white shadow-[0_5px_0_var(--accent-deep)] transition active:translate-y-1 active:shadow-none disabled:opacity-60"
+            >
+              {renameBusy ? "変更中..." : "変更する"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRenameOpen(false)}
+              className="mt-2 w-full rounded-xl py-3 text-sm font-black text-[var(--muted)]"
+            >
+              キャンセル
+            </button>
+          </form>
+        </div>
+      )}
 
       {checked && !user && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-[#14103a]/55 p-4 backdrop-blur-sm">
