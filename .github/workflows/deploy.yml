@@ -1,7 +1,9 @@
 name: Deploy to Cloudflare
 
-# 手動実行のみ。main への push で自動デプロイしたい場合は on.push を有効化してください。
+# main への push で自動デプロイする（手動実行も可）。
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -17,6 +19,7 @@ jobs:
 
       - run: npm ci
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
 
       - name: Publish
