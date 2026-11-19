@@ -94,6 +94,10 @@ const DICT = {
   "spin.more": ["もう少し速く・綺麗に回してみよう", "Spin a bit faster and cleaner"],
   "accel.more": ["もっと勢いよく", "More power"],
   "accel.fastClean": ["速く・綺麗に", "Fast and clean"],
+  "playBlocked": [
+    "スタートできませんでした。通信を確認してもう一度お試しください",
+    "Could not start. Check your connection and try again.",
+  ],
   "savePending": [
     "今回のベスト記録は保存待ちだよ。もう一度試してみよう。",
     "This record is still pending. Please try again.",

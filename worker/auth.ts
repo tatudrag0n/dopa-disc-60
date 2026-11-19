@@ -1,8 +1,21 @@
 import { NAME_MAX, NAME_MIN, validateName } from "../src/shared/types";
 import { buildCookie, getCookie, isHttps, randomToken } from "./util";
 
+/**
+ * セッション（名前札）の置き場。
+ *
+ * KV（DOPA_KV）は無料枠の 1 日 1,000 writes に当たると `put()` が例外になり、
+ * 名前登録もプレイ開始も 500 になっていた。そのため保存先を D1 の
+ * `sessions` テーブルへ移した。テーブルは初回アクセス時に自動作成するので、
+ * 本番 DB にマイグレーションを流していなくてもすぐ動く。
+ *
+ * 旧 KV セッションは読み取りだけフォールバックし、D1 に移してから使う
+ * （移行期間中もログアウトされない）。KV への書き込みは一切しない。
+ */
 export interface AuthEnv {
-  DOPA_KV: KVNamespace;
+  DB: D1Database;
+  /** 旧セッションの読み取り専用フォールバック。書き込みには使わない。 */
+  DOPA_KV?: KVNamespace;
 }
 
 /** セッションから復元したプレイヤー */
@@ -28,14 +41,80 @@ function sessionKey(token: string): string {
   return `sess:${token}`;
 }
 
+let sessionsReady = false;
+
+/** sessions テーブルを用意する（モジュール内フラグで初回のみ） */
+export async function ensureSessionsTable(db: D1Database): Promise<void> {
+  if (sessionsReady) return;
+  await db
+    .prepare(
+      "CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, uid TEXT NOT NULL, name TEXT NOT NULL, exp INTEGER NOT NULL)",
+    )
+    .run();
+  try {
+    await db.prepare("DELETE FROM sessions WHERE exp < ?").bind(Date.now()).run();
+  } catch {
+    /* 掃除に失敗しても本処理は続ける */
+  }
+  sessionsReady = true;
+}
+
+/** 旧 KV セッションの読み取り（書き込みはしない） */
+async function readLegacySession(env: AuthEnv, token: string): Promise<SessionRecord | null> {
+  if (!env.DOPA_KV) return null;
+  try {
+    const raw = (await env.DOPA_KV.get(sessionKey(token), "json")) as SessionRecord | null;
+    if (!raw || typeof raw.uid !== "string" || typeof raw.name !== "string") return null;
+    return { uid: raw.uid, name: raw.name, exp: Number(raw.exp) || 0 };
+  } catch (err) {
+    console.error("legacy session read", err instanceof Error ? err.stack : String(err));
+    return null;
+  }
+}
+
+/** 旧 KV セッションを D1 へ引き継ぐ（KV への書き込みはしない） */
+async function adoptSession(env: AuthEnv, token: string, session: SessionRecord): Promise<void> {
+  try {
+    await env.DB.prepare(
+      "INSERT OR REPLACE INTO sessions (token, uid, name, exp) VALUES (?, ?, ?, ?)",
+    )
+      .bind(token, session.uid, session.name, session.exp)
+      .run();
+  } catch (err) {
+    console.error("session adopt", err instanceof Error ? err.stack : String(err));
+  }
+}
+
 /** Cookie からセッションを引く。無効・期限切れなら null。 */
 export async function getIdentity(env: AuthEnv, req: Request): Promise<Identity | null> {
   const token = getCookie(req, SESSION_COOKIE);
   if (!token) return null;
-  const session = (await env.DOPA_KV.get(sessionKey(token), "json")) as SessionRecord | null;
-  if (!session) return null;
+
+  let session: SessionRecord | null = null;
+  try {
+    await ensureSessionsTable(env.DB);
+    session = await env.DB.prepare("SELECT uid, name, exp FROM sessions WHERE token = ?")
+      .bind(token)
+      .first<SessionRecord>();
+  } catch (err) {
+    // 読めなくても /api/me は 500 にせず「未ログイン」として返す
+    console.error("session read", err instanceof Error ? err.stack : String(err));
+  }
+
+  if (!session) {
+    const legacy = await readLegacySession(env, token);
+    if (!legacy) return null;
+    if (legacy.exp < Date.now()) return null;
+    await adoptSession(env, token, legacy);
+    return { uid: legacy.uid, name: legacy.name };
+  }
+
   if (session.exp < Date.now()) {
-    await env.DOPA_KV.delete(sessionKey(token));
+    try {
+      await env.DB.prepare("DELETE FROM sessions WHERE token = ?").bind(token).run();
+    } catch {
+      /* 期限切れの掃除に失敗しても未ログイン扱いでよい */
+    }
     return null;
   }
   return { uid: session.uid, name: session.name };
@@ -53,16 +132,14 @@ export async function createIdentity(
   const error = validateName(name);
   if (error) return { ok: false, message: error };
 
+  await ensureSessionsTable(env.DB);
+
   const token = randomToken(32);
   const identity: Identity = { uid: `p_${randomToken(12)}`, name };
-  const session: SessionRecord = {
-    uid: identity.uid,
-    name: identity.name,
-    exp: Date.now() + SESSION_TTL_SEC * 1000,
-  };
-  await env.DOPA_KV.put(sessionKey(token), JSON.stringify(session), {
-    expirationTtl: SESSION_TTL_SEC,
-  });
+  const exp = Date.now() + SESSION_TTL_SEC * 1000;
+  await env.DB.prepare("INSERT OR REPLACE INTO sessions (token, uid, name, exp) VALUES (?, ?, ?, ?)")
+    .bind(token, identity.uid, identity.name, exp)
+    .run();
   return {
     ok: true,
     identity,
@@ -78,22 +155,30 @@ export async function renameIdentity(
 ): Promise<{ ok: true; identity: Identity } | { ok: false; message: string }> {
   const token = getCookie(req, SESSION_COOKIE);
   if (!token) return { ok: false, message: "セッションがありません" };
-  const session = (await env.DOPA_KV.get(sessionKey(token), "json")) as SessionRecord | null;
+
+  await ensureSessionsTable(env.DB);
+  const session = await env.DB.prepare("SELECT uid, name, exp FROM sessions WHERE token = ?")
+    .bind(token)
+    .first<SessionRecord>();
   if (!session) return { ok: false, message: "セッションがありません" };
 
   const name = rawName.trim().normalize("NFKC");
   const error = validateName(name);
   if (error) return { ok: false, message: error };
 
-  const next: SessionRecord = { ...session, name };
-  const ttl = Math.max(60, Math.floor((session.exp - Date.now()) / 1000));
-  await env.DOPA_KV.put(sessionKey(token), JSON.stringify(next), { expirationTtl: ttl });
+  await env.DB.prepare("UPDATE sessions SET name = ? WHERE token = ?").bind(name, token).run();
   return { ok: true, identity: { uid: session.uid, name } };
 }
 
 export async function destroyIdentity(env: AuthEnv, req: Request): Promise<void> {
   const token = getCookie(req, SESSION_COOKIE);
-  if (token) await env.DOPA_KV.delete(sessionKey(token));
+  if (!token) return;
+  try {
+    await ensureSessionsTable(env.DB);
+    await env.DB.prepare("DELETE FROM sessions WHERE token = ?").bind(token).run();
+  } catch (err) {
+    console.error("session delete", err instanceof Error ? err.stack : String(err));
+  }
 }
 
 export function clearedCookie(req: Request): string {

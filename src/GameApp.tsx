@@ -351,7 +351,12 @@ export default function App() {
   const startGame = useCallback(async () => {
     // プレイ前に毎回ロボット確認（Turnstile）を通す
     const allowed = await requestPlayTicket();
-    if (!allowed) return;
+    if (!allowed) {
+      // 無言で止まると「押しても何も起きない」に見えるので理由を出す
+      setApiNote(tr('playBlocked'));
+      return;
+    }
+    setApiNote('');
     ensureAudio(); gameAudio.start(); sfx('click');
     runIdRef.current = Date.now();
     landedAtRef.current = 0; landedXRef.current = 0;
@@ -1245,6 +1250,7 @@ export default function App() {
               </div>
             )}
             <button onClick={startGame} className={`${CTA} mt-6 w-full py-5 text-[22px]`}>{tr('start')}</button>
+            {apiNote && <p role="status" className="mt-2 text-center text-xs font-bold text-amber-700">{apiNote}</p>}
             <button onClick={() => setShowHow(v => !v)} className="ghost-btn mt-4 rounded-full bg-[var(--surface)] py-3 text-sm font-bold">{showHow ? tr('howtoClose') : tr('howto')}</button>
             {showHow && <div className="pop-in mt-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 text-[13px] leading-7">{tr('howto.step1')}<br />{tr('howto.step2')}<br />{tr('howto.resultNote')}</div>}
             <section className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 shadow-sm">
