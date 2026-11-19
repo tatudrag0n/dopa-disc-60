@@ -18,6 +18,11 @@ src/
   lib/session.ts         名前の登録・取得
   lib/turnstile.ts       Turnstile ウィジェット
   shared/types.ts        共通の型
+  shared/ngwords.ts      名前のNGワード判定（クライアント・Worker 共通）
+test/
+  ngwords.test.ts        NGワードと名前バリデーションのテスト
+scripts/
+  test.mjs               テスト実行（esbuild でバンドルして node:test）
 worker/
   index.ts               ルーター（/api/*, /actions）
   actions.ts             ランキングの読み書き（D1）
@@ -57,6 +62,18 @@ migrations/
 - 名前の登録時だけ **Cloudflare Turnstile** を検証する
   （`TURNSTILE_SECRET` 未設定ならスキップ）
 - 以降のスコア投稿はセッションで認証される
+- 名前は 2〜16 文字で、制御文字に加えて **NGワード**（差別語・下ネタ・露骨な性的表現・侮蔑語）を弾く
+  - 判定は `src/shared/ngwords.ts`。全角/半角・大文字/小文字・ひらがな/カタカナ、
+    間に挟んだ空白や記号（`ち ん こ`）、leet 表記（`a55`）、同じ文字の繰り返し（`くそおおお`）を
+    まとめてから行う
+  - 誤検知を避けるため、英字は語単位（`Cassandra` の `ass` は拾わない）、短い語（`はげ` `ちび`）は
+    単独で現れたときだけNGにする
+  - サーバーは `400` と `{ error, code: "name.ng" }` を返し、画面はその `code` で日英の文言を出す
+  - 既存のランキング（D1 の `runs`）には手を付けない
+
+```bash
+npm test # NGワードフィルタと名前バリデーションのユニットテスト
+```
 
 ## ローカル開発
 

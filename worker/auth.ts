@@ -1,4 +1,9 @@
-import { NAME_MAX, NAME_MIN, validateName } from "../src/shared/types";
+import {
+  NAME_MAX,
+  NAME_MIN,
+  validateNameDetailed,
+  type NameErrorCode,
+} from "../src/shared/types";
 import { buildCookie, getCookie, isHttps, randomToken } from "./util";
 
 /**
@@ -127,10 +132,12 @@ export async function getIdentity(env: AuthEnv, req: Request): Promise<Identity 
 export async function createIdentity(
   env: AuthEnv,
   rawName: string,
-): Promise<{ ok: true; identity: Identity; cookie: string } | { ok: false; message: string }> {
+): Promise<
+  { ok: true; identity: Identity; cookie: string } | { ok: false; message: string; code: NameErrorCode }
+> {
   const name = rawName.trim().normalize("NFKC");
-  const error = validateName(name);
-  if (error) return { ok: false, message: error };
+  const problem = validateNameDetailed(name);
+  if (problem) return { ok: false, message: problem.message, code: problem.code };
 
   await ensureSessionsTable(env.DB);
 
@@ -152,7 +159,9 @@ export async function renameIdentity(
   env: AuthEnv,
   req: Request,
   rawName: string,
-): Promise<{ ok: true; identity: Identity } | { ok: false; message: string }> {
+): Promise<
+  { ok: true; identity: Identity } | { ok: false; message: string; code?: NameErrorCode }
+> {
   const token = getCookie(req, SESSION_COOKIE);
   if (!token) return { ok: false, message: "セッションがありません" };
 
@@ -163,8 +172,8 @@ export async function renameIdentity(
   if (!session) return { ok: false, message: "セッションがありません" };
 
   const name = rawName.trim().normalize("NFKC");
-  const error = validateName(name);
-  if (error) return { ok: false, message: error };
+  const problem = validateNameDetailed(name);
+  if (problem) return { ok: false, message: problem.message, code: problem.code };
 
   await env.DB.prepare("UPDATE sessions SET name = ? WHERE token = ?").bind(name, token).run();
   return { ok: true, identity: { uid: session.uid, name } };

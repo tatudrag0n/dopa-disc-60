@@ -163,6 +163,13 @@ const DICT = {
     "Could not connect. Please try again.",
   ],
   "gate.errOther": ["登録に失敗しました。もう一度お試しください", "Registration failed. Please try again."],
+  "name.errShort": ["名前は2文字以上にしてください", "Use at least 2 characters"],
+  "name.errLong": ["名前は16文字以内にしてください", "Use 16 characters or fewer"],
+  "name.errChars": ["名前に使えない文字が含まれています", "That name contains characters that can't be used"],
+  "name.errNg": [
+    "その名前は使えません。別の名前にしてください",
+    "That name isn't allowed. Please choose another one.",
+  ],
   "float.ranking": ["ランキング", "Ranking"],
 
   "playingAs": ["プレイヤー", "Playing as"],

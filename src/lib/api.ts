@@ -8,10 +8,13 @@ import type {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** サーバーが返す理由コード（name.ng など）。 */
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -38,9 +41,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    const message =
-      (data as { error?: string } | null)?.error ?? `error:${res.status}`;
-    throw new ApiError(message, res.status);
+    const body = data as { error?: string; code?: string } | null;
+    const message = body?.error ?? `error:${res.status}`;
+    throw new ApiError(message, res.status, body?.code);
   }
   return data as T;
 }

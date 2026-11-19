@@ -11,8 +11,12 @@ export function json(data: unknown, status = 200, extra?: HeadersInit): Response
   return new Response(JSON.stringify(data), { status, headers });
 }
 
-export function fail(message: string, status = 400): Response {
-  return json({ error: message }, status);
+/**
+ * エラーレスポンス。`code` を付けると、クライアントが言語ごとの文言を選べる
+ * （例: name.ng → 「その名前は使えません」）。
+ */
+export function fail(message: string, status = 400, code?: string): Response {
+  return json(code ? { error: message, code } : { error: message }, status);
 }
 
 export async function readJson<T>(req: Request): Promise<T | null> {

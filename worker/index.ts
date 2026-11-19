@@ -93,14 +93,14 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
         return fail("ボット判定に失敗しました。ページを再読み込みしてお試しください", 403);
       }
       const created = await createIdentity(env, typeof body.name === "string" ? body.name : "");
-      if (!created.ok) return fail(created.message, 400);
+      if (!created.ok) return fail(created.message, 400, created.code);
       return json({ user: { name: created.identity.name } }, 200, cookieHeader(req, created.cookie));
     }
 
     const identity = await getIdentity(env, req);
     if (!identity) return fail("セッションがありません", 401);
     const result = await renameIdentity(env, req, typeof body.name === "string" ? body.name : "");
-    if (!result.ok) return fail(result.message, 400);
+    if (!result.ok) return fail(result.message, 400, result.code);
     // ランキングに載っている名前も、新しい名前にそろえる
     await env.DB.prepare("UPDATE runs SET name = ? WHERE uid = ?")
       .bind(result.identity.name, result.identity.uid)

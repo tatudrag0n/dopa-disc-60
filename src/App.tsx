@@ -3,9 +3,27 @@ import GameApp from "./GameApp";
 import { PlayGate } from "./components/PlayGate";
 import { registerPlayTokenProvider, configurePlayGate } from "./lib/playGate";
 import { ApiError, claimName, fetchConfig, fetchMe, renamePlayer } from "./lib/session";
-import { tr, useI18n } from "./lib/i18n";
+import { tr, useI18n, type MessageId } from "./lib/i18n";
 import { useTurnstile } from "./lib/turnstile";
-import { NAME_MAX } from "./shared/types";
+import { NAME_MAX, validateNameDetailed } from "./shared/types";
+
+/**
+ * サーバー（または入力前のチェック）が返した理由コードを、今の言語の文言にする。
+ * 未知のコードは null を返し、呼び出し側がサーバーのメッセージをそのまま出す。
+ */
+function nameErrorText(code: string | undefined): string | null {
+  const key: MessageId | null =
+    code === "name.short"
+      ? "name.errShort"
+      : code === "name.long"
+        ? "name.errLong"
+        : code === "name.chars"
+          ? "name.errChars"
+          : code === "name.ng"
+            ? "name.errNg"
+            : null;
+  return key ? tr(key) : null;
+}
 
 /**
  * ゲーム本体は GameApp（オリジナル実装をほぼそのまま使用）。
@@ -83,8 +101,10 @@ export default function App() {
       e.preventDefault();
       if (busy) return;
       const trimmed = name.trim();
-      if (trimmed.length < 2) {
-        setError(tr("gate.errShort"));
+      // NGワードなどは送る前に弾く（Turnstile のトークンを無駄にしない）
+      const problem = validateNameDetailed(trimmed);
+      if (problem) {
+        setError(nameErrorText(problem.code) ?? problem.message);
         return;
       }
       setBusy(true);
@@ -106,7 +126,7 @@ export default function App() {
         if (err instanceof ApiError) {
           if (err.status === 403) setError(tr("gate.errBot"));
           else if (err.status === 0) setError(tr("gate.errNet"));
-          else setError(`${err.message}（${err.status}）`);
+          else setError(nameErrorText(err.code) ?? `${err.message}（${err.status}）`);
         } else {
           setError(tr("gate.errOther"));
         }
@@ -134,8 +154,9 @@ export default function App() {
     e.preventDefault();
     if (renameBusy) return;
     const trimmed = renameValue.trim();
-    if (trimmed.length < 2) {
-      setRenameError(tr("rename.short"));
+    const problem = validateNameDetailed(trimmed);
+    if (problem) {
+      setRenameError(nameErrorText(problem.code) ?? problem.message);
       return;
     }
     setRenameBusy(true);
@@ -149,7 +170,11 @@ export default function App() {
         window.dispatchEvent(new CustomEvent("dopa:refresh-scores"));
       }
     } catch (err) {
-      setRenameError(err instanceof ApiError ? err.message : tr("rename.failed"));
+      setRenameError(
+        err instanceof ApiError
+          ? (nameErrorText(err.code) ?? err.message)
+          : tr("rename.failed"),
+      );
     } finally {
       setRenameBusy(false);
     }

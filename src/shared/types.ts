@@ -3,6 +3,8 @@
  * ここは DOM にも Workers にも依存しない純粋な TypeScript に保つ。
  */
 
+import { findNgWord } from "./ngwords";
+
 /** ランキングの集計期間 */
 export type ScoreRange = "all" | "today" | "week";
 
@@ -110,10 +112,38 @@ export function clamp(v: number, min: number, max: number): number {
 export const NAME_MIN = 2;
 export const NAME_MAX = 16;
 
-export function validateName(name: string): string | null {
+/** 名前が弾かれた理由。クライアントはこのコードで多言語の文言を選ぶ。 */
+export type NameErrorCode = "name.short" | "name.long" | "name.chars" | "name.ng";
+
+export interface NameProblem {
+  code: NameErrorCode;
+  /** サーバーが返す既定のメッセージ（クライアントは code で上書きできる） */
+  message: string;
+}
+
+/**
+ * 名前の検証。長さ・制御文字に加えて、差別語や下ネタなどのNGワードも弾く。
+ *
+ * ここはクライアント（入力時）と Worker（登録・変更時）の両方から呼ばれるので、
+ * 判定結果は「理由コード + メッセージ」で返す。
+ */
+export function validateNameDetailed(name: string): NameProblem | null {
   const n = name.trim();
-  if (n.length < NAME_MIN) return `名前は${NAME_MIN}文字以上にしてください`;
-  if (n.length > NAME_MAX) return `名前は${NAME_MAX}文字以内にしてください`;
-  if (/[\u0000-\u001f\u007f]/.test(n)) return "名前に使えない文字が含まれています";
+  if (n.length < NAME_MIN) {
+    return { code: "name.short", message: `名前は${NAME_MIN}文字以上にしてください` };
+  }
+  if (n.length > NAME_MAX) {
+    return { code: "name.long", message: `名前は${NAME_MAX}文字以内にしてください` };
+  }
+  if (/[\u0000-\u001f\u007f]/.test(n)) {
+    return { code: "name.chars", message: "名前に使えない文字が含まれています" };
+  }
+  if (findNgWord(n)) {
+    return { code: "name.ng", message: "その名前は使えません。別の名前にしてください" };
+  }
   return null;
+}
+
+export function validateName(name: string): string | null {
+  return validateNameDetailed(name)?.message ?? null;
 }
