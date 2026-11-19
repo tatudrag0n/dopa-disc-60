@@ -101,6 +101,19 @@ test("不適切な名前はランキングから消え、残りは順位どお�
   assert.deepEqual(names, ["たちどら", "花丘", "外島", "ねぎ坊主"]);
 });
 
+test("1,500m を超える既存スコアはランキングから外れる", async () => {
+  const rows = makeRows([
+    { name: "あなどら", total: 5618.3 },
+    { name: "インポねぎし", total: 2095.7 },
+    { name: "たちどら", total: 890.5 },
+    { name: "花丘", total: 533.4 },
+  ]);
+
+  const { names } = await listRanking(rows);
+
+  assert.deepEqual(names, ["たちどら", "花丘"]);
+});
+
 test("NG 名が多くても 20 件そろうまで候補を取る", async () => {
   const entries: { name: string; total: number }[] = [];
   // 上位 30 件のうち 15 件を NG 名にして、20 件の正常な行が残るようにする

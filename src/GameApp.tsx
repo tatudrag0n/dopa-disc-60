@@ -5,6 +5,8 @@ import { analyzeDisc, minimumEnclosingCircle } from './lib/discPhysics';
 import { normalizeSpin, overallGrade, shapeGrade } from './lib/grading';
 import { gameAudio, type SfxName } from './lib/gameAudio';
 import { requestPlayTicket, takePlayTicket } from './lib/playGate';
+import { clampSpeed, computeRealtimeSpin, distanceFor } from './shared/scoring';
+import { ownsPointer } from './shared/pointer';
 
 type Screen = 'start' | 'playing' | 'result';
 type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string; isMe?: boolean };
@@ -34,59 +36,6 @@ const wrapAngle = (a: number) => {
   while (v < -Math.PI) v += Math.PI * 2;
   return v;
 };
-function spinFromLap(speedPxPerMs: number, cleanliness: number) {
-  return speedPxPerMs * (cleanliness / 100) * 2500;
-}
-function computeRealtimeSpin(pts: { x: number; y: number; t: number }[]) {
-  if (pts.length < 10) return null;
-  const windowPts = pts.slice(Math.max(0, pts.length - 48));
-  if (windowPts.length < 10) return null;
-  let len = 0;
-  for (let i = 1; i < windowPts.length; i++) len += Math.hypot(windowPts[i].x - windowPts[i - 1].x, windowPts[i].y - windowPts[i - 1].y);
-  const durationMs = Math.max(1, windowPts[windowPts.length - 1].t - windowPts[0].t);
-  if (durationMs < 30 || len < 20) return null;
-  const speedPxPerMs = len / durationMs;
-  const cx = windowPts.reduce((s, p) => s + p.x, 0) / windowPts.length;
-  const cy = windowPts.reduce((s, p) => s + p.y, 0) / windowPts.length;
-  const radii = windowPts.map((p) => Math.hypot(p.x - cx, p.y - cy));
-  const meanR = radii.reduce((s, v) => s + v, 0) / radii.length;
-  if (meanR < 12) return { speed: speedPxPerMs, cleanliness: 5, spin: 0, direction: 0 };
-  const mean = meanR;
-  const variance = radii.reduce((s, v) => s + (v - mean) * (v - mean), 0) / radii.length;
-  const cv = mean > 0.05 ? Math.sqrt(variance) / mean : 1;
-  let turning = 0;
-  let prevAngle: number | null = null;
-  for (let i = 1; i < windowPts.length; i++) {
-    const a = Math.atan2(windowPts[i].y - windowPts[i - 1].y, windowPts[i].x - windowPts[i - 1].x);
-    if (prevAngle !== null) turning += Math.abs(wrapAngle(a - prevAngle));
-    prevAngle = a;
-  }
-  // Signed rotation around the circle's centre, in screen coordinates
-  // (y points down, so a positive sum is clockwise on screen). This is
-  // the disc's own spin direction: clockwise drawing -> clockwise spin.
-  let signedTurn = 0;
-  let prevCentreAngle: number | null = null;
-  for (const p of windowPts) {
-    const a = Math.atan2(p.y - cy, p.x - cx);
-    if (prevCentreAngle !== null) signedTurn += wrapAngle(a - prevCentreAngle);
-    prevCentreAngle = a;
-  }
-  const direction = signedTurn >= 0 ? 1 : -1;
-  // If the finger keeps reversing, the signed turn cancels out — that is
-  // not a clean spin, so it lowers cleanliness instead of counting as speed.
-  const directionConsistency = turning > 0.01 ? Math.abs(signedTurn) / turning : 0;
-  const expectedTurning = len / Math.max(1, meanR);
-  const turnRatio = clamp(turning / Math.max(0.01, expectedTurning), 0, 1);
-  const cleanliness = Math.round(clamp(100 - cv * 220 - (1 - turnRatio) * 55 - (1 - directionConsistency) * 40, 5, 100));
-  const spin = spinFromLap(speedPxPerMs, cleanliness) * direction;
-  return { speed: speedPxPerMs, cleanliness, spin, direction };
-}
-function distanceFor(shapeBalance: number, spin: number, swipeNorm: number) {
-  const shapeF = 0.25 + 0.75 * (shapeBalance / 100);
-  const spinF = 0.15 + Math.max(0, spin) / 1000;
-  const accelF = 0.20 + 0.80 * clamp(swipeNorm, 0, 1);
-  return Math.round(95 * shapeF * spinF * accelF * 10) / 10;
-}
 function pseudo(i: number, seed = 1) {
   const x = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453;
   return x - Math.floor(x);
@@ -208,9 +157,10 @@ export default function App() {
   const landedAtRef = useRef(0);
   const landedXRef = useRef(0);
   const shapeRef = useRef<{ points: Pt[]; balance: number; grade: string; drawnRadius: number; bboxW: number; bboxH: number; physics?: import('./lib/discPhysics').DiscPhysics }>({ points: circlePoints(), balance: 100, grade: 'S', drawnRadius: 70, bboxW: 140, bboxH: 140 });
-  const strokeRef = useRef<{ active: boolean; pts: Pt[] }>({ active: false, pts: [] });
-  const aimRef = useRef({ x: 0, y: 0, active: false, lastX: 0, lastY: 0, startY: 0, hist: [] as { x: number; y: number; t: number }[], vx: 0, vy: 0, discRot: 0, trail: [] as { x: number; y: number }[] });
-  const spinRef = useRef({ active: false, pts: [] as { x: number; y: number; t: number }[], startTime: 0, lastMoveAt: 0, speed: 0, cleanliness: 0, spin: 0 });
+  // pointerId: 最初に触れた指。2本目以降の指のイベントは無視する
+  const strokeRef = useRef<{ active: boolean; pts: Pt[]; pointerId: number | null }>({ active: false, pts: [], pointerId: null });
+  const aimRef = useRef({ x: 0, y: 0, active: false, pointerId: null as number | null, lastX: 0, lastY: 0, startY: 0, hist: [] as { x: number; y: number; t: number }[], vx: 0, vy: 0, discRot: 0, trail: [] as { x: number; y: number }[] });
+  const spinRef = useRef({ active: false, pointerId: null as number | null, pts: [] as { x: number; y: number; t: number }[], startTime: 0, lastMoveAt: 0, speed: 0, cleanliness: 0, spin: 0 });
   const flightRef = useRef({ balance: 100, grade: 'C', spin: 0, spinSigned: 0, spinSpeed: 0, spinCleanliness: 0, swipeSpeed: 0, swipeNorm: 0, desiredDistance: 0, wobble: 0 });
   const drawRotRef = useRef(0);
   const globalBestRef = useRef(0);
@@ -291,9 +241,9 @@ export default function App() {
     camRef.current = 0;
     dustRef.current = [];
     shapeRef.current = { points: circlePoints(), balance: 100, grade: 'S', drawnRadius: 70, bboxW: 140, bboxH: 140 };
-    strokeRef.current = { active: false, pts: [] };
-    aimRef.current = { x: 0, y: 0, active: false, lastX: 0, lastY: 0, startY: 0, hist: [], vx: 0, vy: 0, discRot: 0, trail: [] };
-    spinRef.current = { active: false, pts: [], startTime: 0, lastMoveAt: 0, speed: 0, cleanliness: 0, spin: 0 };
+    strokeRef.current = { active: false, pts: [], pointerId: null };
+    aimRef.current = { x: 0, y: 0, active: false, pointerId: null, lastX: 0, lastY: 0, startY: 0, hist: [], vx: 0, vy: 0, discRot: 0, trail: [] };
+    spinRef.current = { active: false, pointerId: null, pts: [], startTime: 0, lastMoveAt: 0, speed: 0, cleanliness: 0, spin: 0 };
     flightRef.current = { balance: 100, grade: 'C', spin: 0, spinSigned: 0, spinSpeed: 0, spinCleanliness: 0, swipeSpeed: 0, swipeNorm: 0, desiredDistance: 0, wobble: 0 };
     setShapeLocked(false); setShapeBalance(0); setShapeGrade('C'); setShapeSize(0); setAimX(0); setAimY(0); setSwipeSpeedShown(0); setSpinShown(0); setSpinSpeedShown(0); setSpinCleanlinessShown(0); setMomentumLive(false); setSpinHint(''); setDrawHint('');
   }, []);
@@ -301,6 +251,7 @@ export default function App() {
   const finalizeShape = useCallback(() => {
     const pts = strokeRef.current.pts;
     strokeRef.current.active = false;
+    strokeRef.current.pointerId = null;
     if (pts.length < 8) { strokeRef.current.pts = []; setDrawHint(tr('drawSmall')); return; }
     let len = 0;
     for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
@@ -382,7 +333,7 @@ export default function App() {
     aimRef.current.trail = [];
     aimRef.current.vx = 0; aimRef.current.vy = 0;
     aimRef.current.discRot = 0;
-    spinRef.current = { active: false, pts: [], startTime: 0, lastMoveAt: 0, speed: 0, cleanliness: 0, spin: 0 };
+    spinRef.current = { active: false, pointerId: null, pts: [], startTime: 0, lastMoveAt: 0, speed: 0, cleanliness: 0, spin: 0 };
     setSpinShown(0); setSpinSpeedShown(0); setSpinCleanlinessShown(0); setMomentumLive(false); setSpinHint(''); setSpinDir(0);
     setAimX(0); setAimY(0.24);
     setPhaseBoth('aim');
@@ -406,7 +357,7 @@ export default function App() {
     try {
       if (finalTotal > 0) {
         const key = `distance-${runIdRef.current}-${finalTotal}`;
-        await callApi('records.create', { collection: 'flying_disc_distance_scores', value: { best: finalBest, total: finalTotal, rank: overall, playedAt: new Date().toISOString() }, idempotency_key: key, play_ticket: takePlayTicket() });
+        await callApi('records.create', { collection: 'flying_disc_distance_scores', value: { best: finalBest, total: finalTotal, rank: overall, playedAt: new Date().toISOString(), telemetry: { balance: t.balance, spin: t.spin, swipeNorm: t.swipeNorm } }, idempotency_key: key, play_ticket: takePlayTicket() });
         await loadScores();
       }
     } catch { setApiNote(tr('savePending')); }
@@ -1069,20 +1020,25 @@ export default function App() {
   const onDown = (e: React.PointerEvent) => {
     if (screen !== 'playing') return;
     if (phase === 'landed') { finishGame(); return; }
+    // すでに1本目の指で操作中なら、2本目の指では何も始めない
+    // （描画や回転の状態を上書きして座標が飛ぶのを防ぐ）
+    if (phase === 'draw' && strokeRef.current.active) return;
+    if (phase === 'aim' && (aimRef.current.active || spinRef.current.active)) return;
     ensureAudio();
     const p = posFromEvent(e); const now = performance.now();
     const h = wrapRef.current?.clientHeight || 480;
     if (phase === 'draw') {
       if (shapeLocked) return;
-      strokeRef.current = { active: true, pts: [p] };
+      strokeRef.current = { active: true, pts: [p], pointerId: e.pointerId };
       setDrawHint('');
       (e.target as Element).setPointerCapture?.(e.pointerId);
       return;
     }
     if (phase === 'aim') {
       const w = wrapRef.current?.clientWidth || 400;
-      spinRef.current = { ...spinRef.current, active: true, pts: [{ x: p.x, y: p.y, t: now }], startTime: now, lastMoveAt: now };
+      spinRef.current = { ...spinRef.current, active: true, pointerId: e.pointerId, pts: [{ x: p.x, y: p.y, t: now }], startTime: now, lastMoveAt: now };
       aimRef.current.active = true;
+      aimRef.current.pointerId = e.pointerId;
       aimRef.current.x = p.x;
       aimRef.current.y = p.y;
       aimRef.current.lastX = p.x;
@@ -1103,13 +1059,15 @@ export default function App() {
     const h = wrapRef.current?.clientHeight || 480;
     if (phase === 'draw') {
       const st = strokeRef.current;
-      if (!st.active) return;
+      if (!st.active || !ownsPointer(st.pointerId, e.pointerId)) return;
       const lastPt = st.pts[st.pts.length - 1];
       if (!lastPt || Math.hypot(p.x - lastPt.x, p.y - lastPt.y) > 2.5) st.pts.push(p);
       return;
     }
     if (phase === 'aim') {
       const s = spinRef.current;
+      // 操作中の指以外（2本目以降）の move は座標も回転も動かさない
+      if (aimRef.current.active && !ownsPointer(aimRef.current.pointerId, e.pointerId)) return;
       const inSpinZone = p.y > h * 0.42;
       if (s.active && inSpinZone) {
         const lastPt = s.pts[s.pts.length - 1];
@@ -1141,10 +1099,10 @@ export default function App() {
           const ddx = lastP.x - first.x; const ddy = lastP.y - first.y;
           const dist = Math.hypot(ddx, ddy);
           const dtMs = Math.max(1, lastP.t - first.t);
-          speed = dist / dtMs;
+          speed = clampSpeed(dist / dtMs);
           if (dist > 1) dirX = ddx / dist;
         } else {
-          speed = stepDist / Math.max(1, 16);
+          speed = clampSpeed(stepDist / Math.max(1, 16));
           if (stepDist > 1) dirX = dx / stepDist;
         }
         a.active = false;
@@ -1152,13 +1110,17 @@ export default function App() {
       }
     }
   };
-  const onUp = () => {
+  const onUp = (e: React.PointerEvent) => {
     if (phase === 'draw') {
-      if (strokeRef.current.active) finalizeShape();
+      const st = strokeRef.current;
+      if (!st.active || !ownsPointer(st.pointerId, e.pointerId)) return;
+      finalizeShape();
       return;
     }
     if (phase === 'aim') {
       const s = spinRef.current;
+      const a = aimRef.current;
+      if (!ownsPointer(a.pointerId, e.pointerId) && !ownsPointer(s.pointerId, e.pointerId)) return;
       if (s.active) {
         s.active = false;
         s.lastMoveAt = performance.now();
@@ -1169,6 +1131,7 @@ export default function App() {
         }
       }
       aimRef.current.active = false;
+      aimRef.current.pointerId = null;
     }
   };
   const toggleMute = () => { const next = !muted; setMuted(next); audioRef.current.muted = next; gameAudio.setMuted(next); if (!next) gameAudio.start(); if (!next) { ensureAudio(); tone(660, 840, 0.14, 'sine', 0.04); } };

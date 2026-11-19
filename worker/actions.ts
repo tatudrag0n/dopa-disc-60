@@ -1,5 +1,6 @@
 import { getIdentity, type AuthEnv, type Identity } from "./auth";
 import { hasNgWord } from "../src/shared/ngwords";
+import { distanceFor, MAX_SCORE_M, SPIN_MAX } from "../src/shared/scoring";
 import { json } from "./util";
 import { turnstileEnabled } from "./turnstile";
 import { consumePlayTicket } from "./tickets";
@@ -23,6 +24,52 @@ const CANDIDATE_LIMIT = TOP_LIMIT * 10;
  */
 function isNgName(name: string): boolean {
   return hasNgWord(name);
+}
+
+/**
+ * ランキング・登録に値するスコアかどうか。
+ * 2 本指バグや改造クライアントで出た 2,000m・5,618m のような値は
+ * 物理的にあり得ないので、保存済みの行も含めて公開ランキングから外す。
+ */
+function isPlausibleScore(row: { best: number; total: number }): boolean {
+  return (
+    Number.isFinite(row.best) &&
+    Number.isFinite(row.total) &&
+    row.best >= 0 &&
+    row.total >= 0 &&
+    row.best <= MAX_SCORE_M &&
+    row.total <= MAX_SCORE_M
+  );
+}
+
+/**
+ * クライアントが送ってきた telemetry を、同じ計算式で組み直して照合する。
+ * telemetry の無い旧クライアントはここでは通す（後方互換）。
+ * 問題があればエラーメッセージを返す。
+ */
+const TELEMETRY_TOLERANCE_M = 5;
+
+function verifyTelemetry(value: Record<string, unknown>, best: number, total: number): string | null {
+  const raw = value.telemetry;
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "object") return "スコアの検証情報が不正です";
+  const t = raw as Record<string, unknown>;
+  const balance = Number(t.balance);
+  const spin = Number(t.spin);
+  const swipeNorm = Number(t.swipeNorm);
+  if (!Number.isFinite(balance) || !Number.isFinite(spin) || !Number.isFinite(swipeNorm)) {
+    return "スコアの検証情報が不正です";
+  }
+  if (balance < 0 || balance > 100) return "スコアの検証情報が範囲外です";
+  if (Math.abs(spin) > SPIN_MAX) return "スコアの検証情報が範囲外です";
+  if (swipeNorm < 0 || swipeNorm > 1) return "スコアの検証情報が範囲外です";
+
+  const expected = distanceFor(balance, Math.abs(spin), swipeNorm);
+  const tolerance = Math.max(TELEMETRY_TOLERANCE_M, expected * 0.03);
+  if (Math.abs(expected - best) > tolerance || Math.abs(best - total) > tolerance) {
+    return "スコアが記録と一致しません";
+  }
+  return null;
 }
 
 /** 1 分あたりの投稿上限 */
@@ -79,8 +126,11 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
       .bind(CANDIDATE_LIMIT)
       .all<RunRow>();
 
-    // NG 名の行はランキングから完全に外す（既存の保存済みレコードも含む）
-    const ranking = (results ?? []).filter((r) => !isNgName(r.name)).slice(0, TOP_LIMIT);
+    // NG 名・物理的にあり得ないスコアの行はランキングから完全に外す
+    // （フィルタ導入前に保存された行にも効かせる）
+    const ranking = (results ?? [])
+      .filter((r) => !isNgName(r.name) && isPlausibleScore(r))
+      .slice(0, TOP_LIMIT);
 
     // ランキング圏外でも自分の自己ベストを出せるように、本人の行を別に返す
     let myRecord: {
@@ -98,13 +148,16 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
         .bind(identity.uid)
         .first<RunRow>();
       if (mine) {
-        myRecord = {
-          name: mine.name,
-          best: mine.best,
-          total: mine.total,
-          rank: mine.grade,
-          playedAt: new Date(mine.created_at).toISOString(),
-        };
+        // 異常値が残っている行は「自己ベスト」としても見せない
+        myRecord = isPlausibleScore(mine)
+          ? {
+              name: mine.name,
+              best: mine.best,
+              total: mine.total,
+              rank: mine.grade,
+              playedAt: new Date(mine.created_at).toISOString(),
+            }
+          : null;
       }
     }
 
@@ -151,8 +204,18 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
     if (!Number.isFinite(best) || !Number.isFinite(total)) {
       return json({ error: "スコアの形式が不正です" }, 400);
     }
-    if (best < 0 || best > 100000 || total < 0 || total > 100000) {
+    if (best < 0 || total < 0) {
       return json({ error: "スコアが範囲外です" }, 400);
+    }
+    // 形 S・spin・加速すべて最大でも約 1,083m。1,500m 超は不正として拒否する。
+    if (best > MAX_SCORE_M || total > MAX_SCORE_M) {
+      return json({ error: "スコアが範囲外です" }, 400);
+    }
+
+    // telemetry があれば、同じ計算式で組み直して大きく乖離していないか見る
+    const telemetryError = verifyTelemetry(value, best, total);
+    if (telemetryError) {
+      return json({ error: telemetryError }, 400);
     }
 
     if (await rateLimited(identity)) {
@@ -161,6 +224,7 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
 
     const now = Date.now();
     // 1 人 1 行。自己ベストを更新したときだけ書き換える。
+    // ただし既存の行が異常値（1,500m 超）の場合は、まともな記録で上書きできる。
     await env.DB.prepare(
       `INSERT INTO runs (uid, name, best, total, grade, created_at)
        VALUES (?, ?, ?, ?, ?, ?)
@@ -170,9 +234,9 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
          total = excluded.total,
          grade = excluded.grade,
          created_at = excluded.created_at
-       WHERE excluded.total > runs.total`,
+       WHERE excluded.total > runs.total OR runs.total > ?`,
     )
-      .bind(identity.uid, identity.name, best, total, grade, now)
+      .bind(identity.uid, identity.name, best, total, grade, now, MAX_SCORE_M)
       .run();
 
     const better = await env.DB.prepare("SELECT COUNT(*) AS c FROM runs WHERE total > ?")
