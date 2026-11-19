@@ -114,18 +114,25 @@ export default function App() {
     [busy, name, turnstile],
   );
 
-  const openRename = () => {
+  const openRename = useCallback(() => {
     setRenameValue(user?.name ?? "");
     setRenameError(null);
     setRenameOpen(true);
-  };
+  }, [user]);
+
+  // タイトル画面（GameApp）の「名前変更」ボタンからも開けるようにする
+  useEffect(() => {
+    const onOpen = () => openRename();
+    window.addEventListener("dopa:open-rename", onOpen);
+    return () => window.removeEventListener("dopa:open-rename", onOpen);
+  }, [openRename]);
 
   const submitRename = async (e: React.FormEvent) => {
     e.preventDefault();
     if (renameBusy) return;
     const trimmed = renameValue.trim();
     if (trimmed.length < 2) {
-      setRenameError("2文字以上で入力してください");
+      setRenameError(tr("rename.short"));
       return;
     }
     setRenameBusy(true);
@@ -135,9 +142,11 @@ export default function App() {
       if (res.user) {
         setUser(res.user);
         setRenameOpen(false);
+        // ゲーム側のランキング表示（自分の行・自己ベスト）を即時に更新する
+        window.dispatchEvent(new CustomEvent("dopa:refresh-scores"));
       }
     } catch (err) {
-      setRenameError(err instanceof ApiError ? err.message : "変更できませんでした");
+      setRenameError(err instanceof ApiError ? err.message : tr("rename.failed"));
     } finally {
       setRenameBusy(false);
     }
@@ -160,7 +169,7 @@ export default function App() {
         type="button"
         onClick={toggleLang}
         className="fixed right-2 z-[60] rounded-full border-2 border-[var(--line)] bg-[var(--surface)]/95 px-2.5 py-1.5 text-[11px] font-black text-[var(--ink)] shadow-md backdrop-blur"
-        style={{ bottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+        style={{ bottom: "calc(2rem + env(safe-area-inset-bottom))" }}
         aria-label={lang === "ja" ? "English" : "日本語"}
       >
         {lang === "ja" ? "EN" : "JA"}
@@ -172,9 +181,9 @@ export default function App() {
           type="button"
           onClick={openRename}
           className="fixed left-2 z-[60] rounded-full border-2 border-[var(--line)] bg-[var(--surface)]/95 px-2.5 py-1.5 text-[11px] font-black text-[var(--ink)] shadow-md backdrop-blur"
-          style={{ bottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+          style={{ bottom: "calc(2rem + env(safe-area-inset-bottom))" }}
         >
-          名前変更
+          {tr("rename")}
         </button>
       )}
 
@@ -187,9 +196,9 @@ export default function App() {
             <p className="text-[11px] font-black tracking-[0.2em] text-[var(--accent)]">
               CHANGE NAME
             </p>
-            <h2 className="mt-1 text-center text-xl font-black text-[var(--ink)]">名前を変更</h2>
+            <h2 className="mt-1 text-center text-xl font-black text-[var(--ink)]">{tr("rename.title")}</h2>
             <p className="mt-2 text-center text-xs font-bold leading-relaxed text-[var(--muted)]">
-              ランキングに表示される名前を変えます。
+              {tr("rename.desc")}
             </p>
 
             <input
@@ -200,8 +209,8 @@ export default function App() {
               }}
               maxLength={NAME_MAX}
               autoFocus
-              aria-label="新しい名前"
-              placeholder="新しい名前"
+              aria-label={tr("rename.label")}
+              placeholder={tr("rename.label")}
               className="mt-4 w-full rounded-xl border-2 border-[var(--line)] bg-[var(--bg)] px-3 py-3 text-center text-base font-black text-[var(--ink)] outline-none"
             />
 
@@ -218,14 +227,14 @@ export default function App() {
               disabled={renameBusy}
               className="mt-2 w-full rounded-xl bg-[var(--accent)] py-3.5 text-base font-black text-white shadow-[0_5px_0_var(--accent-deep)] transition active:translate-y-1 active:shadow-none disabled:opacity-60"
             >
-              {renameBusy ? "変更中..." : "変更する"}
+              {renameBusy ? tr("rename.busy") : tr("rename.submit")}
             </button>
             <button
               type="button"
               onClick={() => setRenameOpen(false)}
               className="mt-2 w-full rounded-xl py-3 text-sm font-black text-[var(--muted)]"
             >
-              キャンセル
+              {tr("rename.cancel")}
             </button>
           </form>
         </div>

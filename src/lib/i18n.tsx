@@ -159,7 +159,21 @@ const DICT = {
     "Could not connect. Please try again.",
   ],
   "gate.errOther": ["登録に失敗しました。もう一度お試しください", "Registration failed. Please try again."],
-  "float.ranking": ["ランキング", "Ranking"],} as const;
+  "float.ranking": ["ランキング", "Ranking"],
+
+  "playingAs": ["プレイヤー", "Playing as"],
+  "rename": ["名前変更", "Rename"],
+  "rename.title": ["名前を変更", "Change name"],
+  "rename.desc": [
+    "ランキングに表示される名前を変えます。",
+    "This changes the name shown on the ranking.",
+  ],
+  "rename.label": ["新しい名前", "New name"],
+  "rename.short": ["2文字以上で入力してください", "Use at least 2 characters"],
+  "rename.busy": ["変更中...", "Saving..."],
+  "rename.submit": ["変更する", "Save"],
+  "rename.cancel": ["キャンセル", "Cancel"],
+  "rename.failed": ["変更できませんでした", "Could not change the name"],} as const;
 
 export type MessageId = keyof typeof DICT;
 

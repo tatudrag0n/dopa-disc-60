@@ -44,23 +44,52 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
       : {};
 
   if (action === "records.list") {
+    const identity = await getIdentity(env, req);
     const { results } = await env.DB.prepare(
       "SELECT uid, name, best, total, grade, created_at FROM runs ORDER BY total DESC, created_at ASC LIMIT ?",
     )
       .bind(TOP_LIMIT)
       .all<RunRow>();
 
+    // ランキング圏外でも自分の自己ベストを出せるように、本人の行を別に返す
+    let myRecord: {
+      name: string;
+      best: number;
+      total: number;
+      rank: string;
+      playedAt: string;
+    } | null = null;
+
+    if (identity) {
+      const mine = await env.DB.prepare(
+        "SELECT uid, name, best, total, grade, created_at FROM runs WHERE uid = ?",
+      )
+        .bind(identity.uid)
+        .first<RunRow>();
+      if (mine) {
+        myRecord = {
+          name: mine.name,
+          best: mine.best,
+          total: mine.total,
+          rank: mine.grade,
+          playedAt: new Date(mine.created_at).toISOString(),
+        };
+      }
+    }
+
     return json({
       data: {
         records: (results ?? []).map((r) => ({
-        value: {
-          name: r.name,
-          best: r.best,
-          total: r.total,
-          rank: r.grade,
+          value: {
+            name: r.name,
+            best: r.best,
+            total: r.total,
+            rank: r.grade,
             playedAt: new Date(r.created_at).toISOString(),
+            isMe: identity ? r.uid === identity.uid : false,
           },
         })),
+        myRecord,
       },
     });
   }

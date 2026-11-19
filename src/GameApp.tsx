@@ -7,7 +7,7 @@ import { gameAudio, type SfxName } from './lib/gameAudio';
 import { requestPlayTicket, takePlayTicket } from './lib/playGate';
 
 type Screen = 'start' | 'playing' | 'result';
-type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string };
+type ScoreRow = { best: number; total?: number; rank: string; playedAt: string; name?: string; isMe?: boolean };
 type Phase = 'draw' | 'aim' | 'flying' | 'landed';
 type ShapeWeakest = 'wobble' | 'roughness' | 'balance' | 'area' | 'closure' | 'none'
 type ThrowResult = { distance: number; total: number; shapeGrade: string; shapeWeakest?: ShapeWeakest; shapePhysics?: import('./lib/discPhysics').DiscPhysics; balance: number; spin: number; spinSpeed: number; spinCleanliness: number; swipeSpeed: number; swipeNorm: number; isRecord?: boolean };
@@ -165,6 +165,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('start');
   const [muted, setMuted] = useState(false);
   const [highScores, setHighScores] = useState<ScoreRow[]>([]);
+  const [myRecord, setMyRecord] = useState<ScoreRow | null>(null);
   const [apiNote, setApiNote] = useState('');
   const [best, setBest] = useState(0);
   const [phase, setPhase] = useState<Phase>('draw');
@@ -242,12 +243,21 @@ export default function App() {
   const loadScores = useCallback(async () => {
     try {
       const data = await callApi('records.list', { collection: 'flying_disc_distance_scores' });
-      const rows = (data?.records || []).map((r: any) => r.value as ScoreRow).filter((v: any) => typeof v?.best === 'number').sort((a: ScoreRow, b: ScoreRow) => (b.total ?? b.best) - (a.total ?? a.best)).slice(0, 50);
+      const rows: ScoreRow[] = (data?.records || []).map((r: any) => r.value as ScoreRow).filter((v: any) => typeof v?.best === 'number').sort((a: ScoreRow, b: ScoreRow) => (b.total ?? b.best) - (a.total ?? a.best)).slice(0, 50);
       setHighScores(rows); setApiNote('');
+      // 自己ベストは本人の行から取る（ランキング1位ではない）。旧レスポンスなら名前で拾う
+      const mine = (data?.myRecord as ScoreRow | null) ?? rows.find((r: ScoreRow) => r.isMe || isMe(r.name)) ?? null;
+      setMyRecord(mine);
       if (rows.length) globalBestRef.current = rows[0].total ?? rows[0].best;
     } catch { setApiNote(tr('loadingBest')); }
-  }, []);
+  }, [meName]);
   useEffect(() => { loadScores(); }, [loadScores]);
+  // 名前変更など、外から表示を作り直したいとき
+  useEffect(() => {
+    const onRefresh = () => { void loadScores(); };
+    window.addEventListener('dopa:refresh-scores', onRefresh);
+    return () => window.removeEventListener('dopa:refresh-scores', onRefresh);
+  }, [loadScores]);
 
   useEffect(() => {
     if (screen !== 'result') return;
@@ -378,7 +388,7 @@ export default function App() {
     if (!t) return;
     const finalBest = t.distance;
     const finalTotal = t.total;
-    const prevTotal = highScores.length ? (highScores[0].total ?? highScores[0].best) : 0;
+    const prevTotal = myRecord ? (myRecord.total ?? myRecord.best) : 0;
     const newBest = finalTotal > prevTotal && finalTotal > 0;
     setIsNewBest(newBest);
     const overall = overallGrade(
@@ -396,7 +406,7 @@ export default function App() {
       }
     } catch { setApiNote(tr('savePending')); }
     if (newBest) sfx('best');
-  }, [highScores, loadScores, sfx, lastThrow]);
+  }, [myRecord, loadScores, sfx, lastThrow]);
 
   const onLand = useCallback((distance: number) => {
     const f = flightRef.current;
@@ -1158,8 +1168,8 @@ export default function App() {
   };
   const toggleMute = () => { const next = !muted; setMuted(next); audioRef.current.muted = next; gameAudio.setMuted(next); if (!next) gameAudio.start(); if (!next) { ensureAudio(); tone(660, 840, 0.14, 'sine', 0.04); } };
 
-  const bestTotalDisplay = highScores.length ? (highScores[0].total ?? highScores[0].best) : 0;
-  const bestDistDisplay = highScores.length ? highScores[0].best : 0;
+  const bestTotalDisplay = myRecord ? (myRecord.total ?? myRecord.best) : 0;
+  const bestDistDisplay = myRecord ? myRecord.best : 0;
   const stepIndex = screen === 'result' ? 2 : phase === 'draw' ? 0 : phase === 'landed' ? 2 : 1;
   const steps = [tr('step1'), tr('step2'), tr('step3')];
   const spinPct = Math.min(100, (spinShown / 2500) * 100);
@@ -1218,14 +1228,28 @@ export default function App() {
             <div className="mt-4 rounded-[24px] border border-[var(--line)] bg-[var(--surface)] p-5 text-center shadow-[0_10px_28px_rgba(22,48,42,.07)]">
               <p className="flex items-center justify-center gap-1.5 text-xs font-bold tracking-widest text-[var(--muted)]"><Trophy size={14} className="text-[var(--accent)]" /> {tr('best')}</p>
               <p className="mt-2 bg-gradient-to-r from-[#ff6a00] via-[#ff2e88] to-[#a100ff] bg-clip-text text-[44px] font-black leading-none text-transparent">{bestTotalDisplay > 0 ? fmtScore(bestTotalDisplay) : '—'}</p>
-              {bestTotalDisplay > 0 && <p className="mt-2 text-xs font-bold text-[var(--muted)]">{highScores[0]?.rank ? `${tr('rankShort')} ${highScores[0].rank} ・ ` : ''}{fmt(bestDistDisplay)}</p>}
+              {bestTotalDisplay > 0 && <p className="mt-2 text-xs font-bold text-[var(--muted)]">{myRecord?.rank ? `${tr('rankShort')} ${myRecord.rank} ・ ` : ''}{fmt(bestDistDisplay)}</p>}
             </div>
+            {meName && (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 shadow-sm">
+                <p className="min-w-0 truncate text-[13px] font-bold text-[var(--muted)]">
+                  {tr('playingAs')} <span className="font-black text-[var(--ink)]">{meName}</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { window.dispatchEvent(new CustomEvent('dopa:open-rename')); }}
+                  className="shrink-0 rounded-full border-2 border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-[12px] font-black text-[var(--ink)] shadow-sm transition active:translate-y-0.5"
+                >
+                  {tr('rename')}
+                </button>
+              </div>
+            )}
             <button onClick={startGame} className={`${CTA} mt-6 w-full py-5 text-[22px]`}>{tr('start')}</button>
             <button onClick={() => setShowHow(v => !v)} className="ghost-btn mt-4 rounded-full bg-[var(--surface)] py-3 text-sm font-bold">{showHow ? tr('howtoClose') : tr('howto')}</button>
             {showHow && <div className="pop-in mt-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 text-[13px] leading-7">{tr('howto.step1')}<br />{tr('howto.step2')}<br />{tr('howto.resultNote')}</div>}
             <section className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 shadow-sm">
               <h2 className="flex items-center gap-2 text-sm font-black"><Trophy size={17} className="text-[var(--accent)]" /> {tr('top5')}</h2>
-              {highScores.length === 0 ? <p className="mt-3 text-sm text-[var(--muted)]">{tr('noRecords')}</p> : <ol className="mt-3 max-h-[42dvh] space-y-2 overflow-y-auto overscroll-contain pr-1">{highScores.map((r, i) => <li key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${isMe(r.name) ? "bg-[var(--accent-soft)] ring-2 ring-[var(--accent)]" : "bg-[var(--surface-2)]"}`}><span className="font-black">{rankLabel(i + 1)} <span className="ml-1 text-xs text-[var(--muted)]">{r.name}</span> {r.rank && <span className="ml-1 text-[var(--accent)]">{r.rank}</span>}</span><span className="font-black">{fmtScore(r.total ?? r.best)}</span><span className="text-xs text-[var(--muted)]">{fmt(r.best)}</span></li>)}</ol>}
+              {highScores.length === 0 ? <p className="mt-3 text-sm text-[var(--muted)]">{tr('noRecords')}</p> : <ol className="mt-3 max-h-[42dvh] space-y-2 overflow-y-auto overscroll-contain pr-1">{highScores.map((r, i) => <li key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${(r.isMe ?? isMe(r.name)) ? "bg-[var(--accent-soft)] ring-2 ring-[var(--accent)]" : "bg-[var(--surface-2)]"}`}><span className="font-black">{rankLabel(i + 1)} <span className="ml-1 text-xs text-[var(--muted)]">{r.name}</span> {r.rank && <span className="ml-1 text-[var(--accent)]">{r.rank}</span>}</span><span className="font-black">{fmtScore(r.total ?? r.best)}</span><span className="text-xs text-[var(--muted)]">{fmt(r.best)}</span></li>)}</ol>}
               {apiNote && <p className="mt-2 text-xs text-amber-700">{apiNote}</p>}
             </section>
           </main>
