@@ -1,9 +1,9 @@
 import { getIdentity, type AuthEnv, type Identity } from "./auth";
 import { json } from "./util";
 import { turnstileEnabled } from "./turnstile";
+import { consumePlayTicket } from "./tickets";
 
 export interface ActionsEnv extends AuthEnv {
-  DB: D1Database;
   TURNSTILE_SECRET?: string;
 }
 
@@ -22,12 +22,25 @@ interface RunRow {
   created_at: number;
 }
 
-async function rateLimited(env: ActionsEnv, identity: Identity): Promise<boolean> {
+/** インメモリのレート制限カウンタ（1 分窓） */
+const rateBuckets = new Map<string, { window: number; count: number }>();
+
+async function rateLimited(identity: Identity): Promise<boolean> {
+  // KV の write は上限に当たると 500 になるので、isolate 内のメモリで
+  // ベストエフォートの制限をする（厳密な分散制限ではないが十分）。
   const window = Math.floor(Date.now() / 60_000);
-  const key = `rl:${identity.uid}:${window}`;
-  const current = Number((await env.DOPA_KV.get(key)) ?? "0");
-  if (current >= RATE_PER_MIN) return true;
-  await env.DOPA_KV.put(key, String(current + 1), { expirationTtl: 120 });
+  const key = `${identity.uid}:${window}`;
+  try {
+    const current = rateBuckets.get(key);
+    const count = current && current.window === window ? current.count : 0;
+    if (count >= RATE_PER_MIN) return true;
+    rateBuckets.set(key, { window, count: count + 1 });
+    if (rateBuckets.size > 5000) {
+      for (const [k, v] of rateBuckets) if (v.window !== window) rateBuckets.delete(k);
+    }
+  } catch {
+    return false;
+  }
   return false;
 }
 
@@ -108,15 +121,13 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
     const total = Number(value.total);
     const grade = typeof value.rank === "string" ? value.rank.slice(0, 4) : "D";
 
-    // プレイ券（Turnstile の確認を通った証拠）を検証して消費する
+    // プレイ券（Turnstile の確認を通った証拠）を検証して消費する（D1 保存）
     if (turnstileEnabled(env)) {
       const ticket = typeof args.play_ticket === "string" ? args.play_ticket : "";
       if (!ticket) return json({ error: "プレイ前の確認が必要です" }, 403);
-      const saved = (await env.DOPA_KV.get(`ticket:${ticket}`, "json")) as { exp: number } | null;
-      if (!saved || saved.exp < Date.now()) {
+      if (!(await consumePlayTicket(env.DB, ticket))) {
         return json({ error: "確認の有効期限が切れました。もう一度スタートしてください" }, 403);
       }
-      await env.DOPA_KV.delete(`ticket:${ticket}`);
     }
 
     if (!Number.isFinite(best) || !Number.isFinite(total)) {
@@ -126,7 +137,7 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
       return json({ error: "スコアが範囲外です" }, 400);
     }
 
-    if (await rateLimited(env, identity)) {
+    if (await rateLimited(identity)) {
       return json({ error: "投稿が多すぎます。少し待ってから再挑戦してください" }, 429);
     }
 

@@ -8,8 +8,9 @@ import {
 } from "./auth";
 import { handleActions, type ActionsEnv } from "./actions";
 import { turnstileEnabled, verifyTurnstile, type TurnstileEnv } from "./turnstile";
+import { issuePlayTicket } from "./tickets";
 import type { ConfigResponse, MeResponse } from "../src/shared/types";
-import { clientKey, fail, json, randomToken, readJson } from "./util";
+import { clientKey, fail, json, readJson } from "./util";
 
 export interface Env extends ActionsEnv, TurnstileEnv {
   ASSETS: Fetcher;
@@ -72,12 +73,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     if (!(await verifyTurnstile(env, token, clientKey(req)))) {
       return fail("確認に失敗しました。もう一度お試しください", 403);
     }
-    const ticket = randomToken(24);
-    await env.DOPA_KV.put(
-      `ticket:${ticket}`,
-      JSON.stringify({ exp: Date.now() + 180_000 }),
-      { expirationTtl: 180 },
-    );
+    // 券は D1 に置く（KV の writes 上限で 500 になっていたため）
+    const ticket = await issuePlayTicket(env.DB);
     return json({ data: { ticket } });
   }
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import GameApp from "./GameApp";
 import { PlayGate } from "./components/PlayGate";
-import { registerPlayTokenProvider } from "./lib/playGate";
+import { registerPlayTokenProvider, configurePlayGate } from "./lib/playGate";
 import { ApiError, claimName, fetchConfig, fetchMe, renamePlayer } from "./lib/session";
 import { tr, useI18n } from "./lib/i18n";
 import { useTurnstile } from "./lib/turnstile";
@@ -70,7 +70,10 @@ export default function App() {
         fetchConfig().catch(() => null),
       ]);
       if (me?.user) setUser(me.user);
-      setSiteKey(cfg?.turnstileSiteKey ?? null);
+      const key = cfg?.turnstileSiteKey ?? null;
+      setSiteKey(key);
+      // Turnstile 無効（siteKey=null）なら、スタート前の確認・券取得をしない
+      configurePlayGate(Boolean(key));
       setChecked(true);
     })();
   }, []);
