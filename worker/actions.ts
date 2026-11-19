@@ -1,4 +1,5 @@
 import { getIdentity, type AuthEnv, type Identity } from "./auth";
+import { hasNgWord } from "../src/shared/ngwords";
 import { json } from "./util";
 import { turnstileEnabled } from "./turnstile";
 import { consumePlayTicket } from "./tickets";
@@ -9,6 +10,20 @@ export interface ActionsEnv extends AuthEnv {
 
 /** 返すランキング件数（ゲーム側は TOP 5 を表示する） */
 const TOP_LIMIT = 20;
+
+/**
+ * DB から取る候補の件数。NG 名を除いても TOP_LIMIT 件そろうように多めに取る。
+ * 異常な名前が大量に入っても全件走査にならないよう上限を置いている。
+ */
+const CANDIDATE_LIMIT = TOP_LIMIT * 10;
+
+/**
+ * ランキングに載せない名前かどうか。
+ * 登録時だけでなく、フィルタ導入前に保存された行にも効かせる。
+ */
+function isNgName(name: string): boolean {
+  return hasNgWord(name);
+}
 
 /** 1 分あたりの投稿上限 */
 const RATE_PER_MIN = 20;
@@ -61,8 +76,11 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
     const { results } = await env.DB.prepare(
       "SELECT uid, name, best, total, grade, created_at FROM runs ORDER BY total DESC, created_at ASC LIMIT ?",
     )
-      .bind(TOP_LIMIT)
+      .bind(CANDIDATE_LIMIT)
       .all<RunRow>();
+
+    // NG 名の行はランキングから完全に外す（既存の保存済みレコードも含む）
+    const ranking = (results ?? []).filter((r) => !isNgName(r.name)).slice(0, TOP_LIMIT);
 
     // ランキング圏外でも自分の自己ベストを出せるように、本人の行を別に返す
     let myRecord: {
@@ -92,7 +110,7 @@ export async function handleActions(env: ActionsEnv, req: Request, body: unknown
 
     return json({
       data: {
-        records: (results ?? []).map((r) => ({
+        records: ranking.map((r) => ({
           value: {
             name: r.name,
             best: r.best,

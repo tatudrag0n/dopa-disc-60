@@ -129,6 +129,9 @@ const JA_CONTAINS: NgEntry[] = prepare([
   { word: "ちんこ", category: "sexual" },
   { word: "ちんぽ", category: "sexual" },
   { word: "ちんちん", category: "sexual" },
+  { word: "あなる", category: "sexual" },
+  { word: "ふぁっく", category: "profanity" },
+  { word: "いんぽ", category: "sexual" },
   { word: "まんこ", category: "sexual" },
   { word: "おめこ", category: "sexual" },
   { word: "まんぐり", category: "sexual" },
@@ -187,6 +190,15 @@ const JA_CONTAINS: NgEntry[] = prepare([
  * 語の先頭・末尾でもNGにする短い侮蔑語。
  * 「ばか！」「しね」のように単体で使われる語だけをここに置く。
  */
+/**
+ * 語頭に来たときだけNGにする語。
+ * 「しこ」は「よしこ」「ほしこ」のように名前の途中にも現れるので、
+ * 語頭のときだけ判定する（「しこドラ」などは弾く）。
+ */
+const JA_PREFIX: NgEntry[] = prepare([
+  { word: "しこ", category: "sexual" },
+]);
+
 const JA_EDGE_AFFIX: NgEntry[] = prepare([
   { word: "しね", category: "insult" },
   { word: "ばか", category: "insult" },
@@ -300,6 +312,26 @@ const LATIN_PHRASES: NgEntry[] = prepare([
   { word: "whitepower", category: "discrimination" },
 ]);
 
+/**
+ * 英字の連なりの中に含まれていたらNGにする語。
+ * 「黒人niggerboy」「fuckboy」のように、そのままでは語として一致しない
+ * 複合語・別表記を拾う。誤検知しないよう、はっきりした長めの語だけを置く
+ * （ass / tit / dick / cum / cunt のような短く紛らわしい語はここに入れない）。
+ */
+const LATIN_SUBSTRINGS: NgEntry[] = prepare([
+  { word: "fuck", category: "profanity" },
+  { word: "shit", category: "profanity" },
+  { word: "bitch", category: "profanity" },
+  { word: "whore", category: "profanity" },
+  { word: "slut", category: "profanity" },
+  { word: "asshole", category: "sexual" },
+  { word: "nigger", category: "discrimination" },
+  { word: "nigga", category: "discrimination" },
+  { word: "faggot", category: "discrimination" },
+  { word: "retard", category: "discrimination" },
+  { word: "hitler", category: "discrimination" },
+]);
+
 export interface NgHit {
   /** 一致したNGワード（正規化後の表記） */
   word: string;
@@ -347,9 +379,22 @@ export function findNgWord(rawName: string): NgHit | null {
       if (hit) return { word: entry.word, category: entry.category };
     }
 
+    for (const entry of JA_PREFIX) {
+      const hit = compact.startsWith(entry.word) || tokens.some((token) => token.startsWith(entry.word));
+      if (hit) return { word: entry.word, category: entry.category };
+    }
+
     const latinTokens = [...tokens, ...joinedSingleCharRuns(tokens)];
     for (const entry of LATIN_TOKENS) {
       if (latinTokens.some((token) => token === entry.word || trimDigits(token) === entry.word)) {
+        return { word: entry.word, category: entry.category };
+      }
+    }
+
+    // 「黒人niggerboy」のように別の文字とつながった英字も、英字の連なりだけを見て判定する
+    const runs = tokens.flatMap((token) => token.match(/[a-z]+/g) ?? []);
+    for (const entry of LATIN_SUBSTRINGS) {
+      if (runs.some((run) => run.includes(entry.word) || trimDigits(run).includes(entry.word))) {
         return { word: entry.word, category: entry.category };
       }
     }
