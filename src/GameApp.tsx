@@ -1185,8 +1185,18 @@ export default function App() {
     try {
       const { file } = await renderResultShareImage(shapeRef.current.points, input, lang);
       if (nativeShare) {
-        await navigator.share({ text, files: [file] });
-        setShareNote(tr('share.done'));
+        try {
+          await navigator.share({ text, files: [file] });
+          setShareNote(tr('share.done'));
+        } catch (err) {
+          // 共有シートを閉じただけ（キャンセル）は何も出さない
+          if (!isAbortError(err)) {
+            // ファイル共有が拒否された（iOS 等）→ 画像保存＋X の投稿画面へ
+            downloadShareFile(file);
+            window.open(buildXIntentUrl(text), '_blank', 'noopener,noreferrer');
+            setShareNote(tr('share.savedForX'));
+          }
+        }
       } else {
         downloadShareFile(file);
         setShareNote(tr('share.savedForX'));
