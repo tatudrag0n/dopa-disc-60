@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Volume2, VolumeX, Trophy, RotateCcw, Home, ArrowRight, RotateCw, Sparkles } from 'lucide-react';
-import { rankLabel, tr, useI18n } from './lib/i18n';
+import { Volume2, VolumeX, Trophy, RotateCcw, Home, ArrowRight, RotateCw, Sparkles, Share2, Download } from 'lucide-react';
+import { getLang, rankLabel, tr, useI18n } from './lib/i18n';
+import { buildShareText, buildXIntentUrl, downloadShareFile, renderResultShareImage, type ShareResultInput } from './lib/shareResult';
 import { analyzeDisc, minimumEnclosingCircle } from './lib/discPhysics';
 import { normalizeSpin, overallGrade, shapeGrade } from './lib/grading';
 import { gameAudio, type SfxName } from './lib/gameAudio';
@@ -42,6 +43,23 @@ function pseudo(i: number, seed = 1) {
 }
 const CTA = 'calm-btn flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-8 py-4 text-[18px] font-black text-white';
 function swipeLabel(norm: number) { return norm >= 0.75 ? tr('accel.fast') : norm >= 0.45 ? tr('accel.justRight') : tr('accel.slow'); }
+/** Web Share API で「ファイル付き」を共有できるか（スマホの共有シート） */
+function canShareFiles(file: File): boolean {
+  const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
+  if (typeof nav.share !== 'function' || typeof nav.canShare !== 'function') return false;
+  try { return nav.canShare({ files: [file] }); } catch { return false; }
+}
+function mobileFileShareSupported(): boolean {
+  try {
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
+    if (typeof File === 'undefined') return false;
+    const probe = new File([new Uint8Array([137, 80, 78, 71])], 'disc-result.png', { type: 'image/png' });
+    return canShareFiles(probe);
+  } catch { return false; }
+}
+function isAbortError(err: unknown): boolean {
+  return Boolean(err && typeof err === 'object' && (err as { name?: string }).name === 'AbortError');
+}
 function shapeWeakLabel(w?: ShapeWeakest) {
   switch (w) {
     case 'wobble': return tr('shapeWeak.wobble');
@@ -140,6 +158,8 @@ export default function App() {
   const [spinDir, setSpinDir] = useState(0);
   const [momentumLive, setMomentumLive] = useState(false);
   const [drawHint, setDrawHint] = useState('');
+  const [shareNote, setShareNote] = useState('');
+  const [shareBusy, setShareBusy] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -314,6 +334,7 @@ export default function App() {
     const w = randomWind(); windRef.current = w;
     setWind(w); setLastThrow(null); setBest(0); setLandedRecord(false); setDisplayedTotal(0); setRankShown(false); confettiRef.current = []; setPhaseBoth('draw');
     setIsNewBest(false); setScreen('playing');
+    setShareNote(''); setShareBusy(false);
     setupThrow();
   }, [ensureAudio, sfx, setPhaseBoth, setupThrow]);
 
@@ -1136,6 +1157,64 @@ export default function App() {
   };
   const toggleMute = () => { const next = !muted; setMuted(next); audioRef.current.muted = next; gameAudio.setMuted(next); if (!next) gameAudio.start(); if (!next) { ensureAudio(); tone(660, 840, 0.14, 'sine', 0.04); } };
 
+  // ——— 結果のシェア（X / 画像保存）
+  const shareInput = useCallback((): ShareResultInput | null => {
+    const t = result.throw;
+    if (!t) return null;
+    return {
+      distance: t.distance,
+      rank: result.rank,
+      shapeGrade: t.shapeGrade,
+      spin: t.spin,
+      accelLabel: swipeLabel(t.swipeNorm),
+      isRecord: isNewBest,
+    };
+  }, [result, isNewBest]);
+
+  const shareToX = useCallback(async () => {
+    if (shareBusy) return;
+    const input = shareInput();
+    if (!input) return;
+    const lang = getLang();
+    const text = buildShareText(input, lang);
+    const nativeShare = mobileFileShareSupported();
+    setShareBusy(true); setShareNote('');
+    // PC ブラウザ等では「画像を保存 → X の投稿画面を開く」。
+    // ポップアップブロックを避けるため、クリックと同じ流れで先に開いておく。
+    if (!nativeShare) window.open(buildXIntentUrl(text), '_blank', 'noopener,noreferrer');
+    try {
+      const { file } = await renderResultShareImage(shapeRef.current.points, input, lang);
+      if (nativeShare) {
+        await navigator.share({ text, files: [file] });
+        setShareNote(tr('share.done'));
+      } else {
+        downloadShareFile(file);
+        setShareNote(tr('share.savedForX'));
+      }
+    } catch (err) {
+      // 共有シートを閉じただけ（キャンセル）はエラー表示にしない
+      if (!isAbortError(err)) setShareNote(tr('share.failed'));
+    } finally {
+      setShareBusy(false);
+    }
+  }, [shareBusy, shareInput]);
+
+  const saveResultImage = useCallback(async () => {
+    if (shareBusy) return;
+    const input = shareInput();
+    if (!input) return;
+    setShareBusy(true); setShareNote('');
+    try {
+      const { file } = await renderResultShareImage(shapeRef.current.points, input, getLang());
+      downloadShareFile(file);
+      setShareNote(tr('share.saved'));
+    } catch {
+      setShareNote(tr('share.failed'));
+    } finally {
+      setShareBusy(false);
+    }
+  }, [shareBusy, shareInput]);
+
   const bestTotalDisplay = myRecord ? (myRecord.total ?? myRecord.best) : 0;
   const bestDistDisplay = myRecord ? myRecord.best : 0;
   const stepIndex = screen === 'result' ? 2 : phase === 'draw' ? 0 : phase === 'landed' ? 2 : 1;
@@ -1366,6 +1445,28 @@ export default function App() {
         )}
 
         <div className="mt-auto pt-8">
+              <div className="mb-4 rounded-[20px] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[0_10px_28px_rgba(22,48,42,.07)]">
+                <p className="text-[12px] font-black tracking-widest text-[var(--muted)]">{tr('share.title')}</p>
+                <div className="mt-3 flex items-stretch gap-2">
+                  <button
+                    type="button"
+                    onClick={shareToX}
+                    disabled={shareBusy}
+                    className={`${CTA} min-w-0 flex-1 py-3.5 text-[16px] disabled:opacity-60`}
+                  >
+                    <Share2 size={18} /> {shareBusy ? tr('share.busy') : tr('share.x')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveResultImage}
+                    disabled={shareBusy}
+                    className="ghost-btn flex shrink-0 items-center justify-center gap-2 rounded-full border-2 border-[var(--line)] bg-[var(--surface-2)] px-4 py-3.5 text-[14px] font-black disabled:opacity-60"
+                  >
+                    <Download size={17} /> {tr('share.save')}
+                  </button>
+                </div>
+                {shareNote && <p role="status" className="mt-2 text-center text-[12px] font-bold leading-relaxed text-[var(--accent)]">{shareNote}</p>}
+              </div>
               <button onClick={startGame} className={`${CTA} w-full py-5 text-[20px]`}><RotateCcw size={20} /> {tr('again')}</button>
               <button onClick={() => setScreen('start')} className="ghost-btn mx-auto mt-3 flex items-center justify-center gap-2 rounded-full bg-[var(--surface)] px-6 py-3 font-bold"><Home size={18} /> {tr('backToTitle')}</button>
             </div>

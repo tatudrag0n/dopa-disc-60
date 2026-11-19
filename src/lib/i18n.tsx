@@ -61,6 +61,21 @@ const DICT = {
   "again": ["もう一度投げる", "Throw again"],
   "backToTitle": ["タイトルに戻る", "Back to title"],
 
+  "share.title": ["結果をシェア", "Share your result"],
+  "share.x": ["Xで共有", "Share on X"],
+  "share.save": ["画像を保存", "Save image"],
+  "share.busy": ["画像を作成中…", "Preparing image…"],
+  "share.done": ["共有画面を開きました", "Share sheet opened"],
+  "share.savedForX": [
+    "画像を保存しました。Xの画面に添付して投稿できます",
+    "Image saved. Attach it to your post on X.",
+  ],
+  "share.saved": ["画像を保存しました", "Image saved"],
+  "share.failed": [
+    "画像を作れませんでした。もう一度お試しください",
+    "Could not create the image. Please try again.",
+  ],
+
   "scoreIsDistance": ["スコア = 飛距離のみ", "Score = distance only"],
   "grade": ["グレード", "Grade"],
   "formula": ["飛距離 = 形状 × 回転 × 加速度", "Distance = shape × spin × accel"],
